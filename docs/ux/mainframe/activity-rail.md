@@ -2,7 +2,7 @@
 
 ## Summary
 
-The activity rail runs the full height of the left edge of the window. The rail uses an icon-above-label layout and selects between top-level activities. Each activity renders its own full-width content area. There is no secondary sidebar — sub-navigation within activities is not our concern.
+The activity rail runs the full height of the left edge of the window. The rail uses an icon-above-label layout and selects between top-level activities.
 
 ## Activities
 
@@ -41,7 +41,6 @@ The activity rail runs the full height of the left edge of the window. The rail 
 - **Height**: full window height (`h-full`), flex column
 - **Background**: `bg-background`, visually continuous with the content area
 - **Right border**: theme `border-r`
-- **Header spacer**: `h-12` empty div at top, aligns items below macOS window chrome
 - **Item container**: flex column, `items-center`, `gap-1`, `p-2`
 
 ### Item
@@ -51,17 +50,18 @@ Each item is a `NavLink` — full width, flex column, content centred.
 - **Icon**: Lucide, 16px
 - **Label**: `text-[10px]`, `font-medium`, below icon with `gap-1`
 - **Padding**: `py-3 px-2`
-- **Left border**: `border-l-2`, always present (transparent when inactive, provides consistent alignment)
 - **Transition**: `transition-colors`
 - **Home route**: uses `end` prop to prevent matching all routes
 
 ### States
 
-| State | Left border | Text colour | Background |
-|-------|-------------|-------------|------------|
-| Active | `border-primary` | `text-foreground` | none |
-| Inactive | `border-transparent` | `text-muted-foreground` | none |
-| Hover (inactive only) | `border-transparent` | `text-muted-foreground` | `bg-secondary` `rounded-md` |
+Selection follows the Slack pattern, the active item gets a subtle filled background pill.
+
+| State | Text colour | Background |
+|-------|-------------|------------|
+| Active | `text-foreground` | subtle filled `rounded-md` background |
+| Inactive | `text-muted-foreground` | none |
+| Hover (inactive only) | `text-muted-foreground` | lighter filled `rounded-md` background |
 
 ### Content area
 

@@ -19,7 +19,6 @@ const activities: ActivityItem[] = [
 export function ActivityRail() {
   return (
     <nav className="flex h-full w-[72px] flex-col border-r bg-background">
-      <div className="h-12" />
       <div className="flex flex-col items-center gap-1 p-2">
         {activities.map(({ to, icon: Icon, label, end }) => (
           <NavLink
@@ -28,10 +27,10 @@ export function ActivityRail() {
             end={end}
             className={({ isActive }) =>
               [
-                "flex w-full flex-col items-center gap-1 border-l-2 px-2 py-3 transition-colors",
+                "flex w-full flex-col items-center gap-1 rounded-md px-2 py-3 transition-colors",
                 isActive
-                  ? "border-primary text-foreground"
-                  : "border-transparent text-muted-foreground hover:rounded-md hover:bg-secondary",
+                  ? "bg-secondary text-foreground"
+                  : "text-muted-foreground hover:bg-secondary/50",
               ].join(" ")
             }
           >

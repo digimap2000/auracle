@@ -18,6 +18,16 @@ The `docs/` folder is the single source of truth for Auracle. Every implementati
 | `docs/data-models.md` | All types (Rust + TypeScript), trait definitions, IPC contract, frontend-only types | Adding or changing data structures |
 | `docs/ci-cd.md` | GitHub Actions workflow, build matrix, release process, auto-updater, code signing | Release or deployment work |
 
+## Writing Specs
+
+Specs are concrete, concise statements of what is required. They describe the target state — what the thing *is* — not what changed or what was removed. A reader coming to the spec fresh should understand the design without needing to know its history.
+
+**State what it is, not what it isn't.** Say "Slack-style filled pill highlight" not "Slack-style filled pill highlight, no left-edge border". The coder reads the spec and builds what's described. If something isn't mentioned, it doesn't exist.
+
+**Be descriptive, not prescriptive.** Specs describe intent and constraints. They are not pseudocode in plain English. Say "subtle filled background, rounded" not "`bg-secondary/50 rounded-md px-2 py-1.5`". The coder picks the implementation that satisfies the description.
+
+**Keep them stable.** A spec should read cleanly at any point in time. When requirements change, rewrite the relevant section to reflect the new reality. Don't leave revision history or "previously we had X" commentary in the spec itself.
+
 ## Before Starting Implementation
 
 Every feature or change should follow this sequence:
