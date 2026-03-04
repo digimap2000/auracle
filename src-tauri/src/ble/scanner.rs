@@ -4,7 +4,7 @@ use std::time::Instant;
 
 use btleplug::api::{Central, CentralEvent, Manager as _, Peripheral as _, ScanFilter};
 use btleplug::platform::Manager;
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use futures::StreamExt;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::Mutex;
@@ -123,6 +123,18 @@ impl BleScanner {
         Ok(())
     }
 
+    /// Remove devices not seen in the last 30 seconds.
+    fn prune_stale(devices: &mut HashMap<String, BleDevice>) {
+        let now = Utc::now();
+        devices.retain(|_, d| {
+            if let Ok(ts) = d.last_seen.parse::<DateTime<Utc>>() {
+                (now - ts).num_seconds() < 30
+            } else {
+                false
+            }
+        });
+    }
+
     async fn scan_loop(
         adapter: btleplug::platform::Adapter,
         inner: Arc<Mutex<ScannerState>>,
@@ -148,8 +160,24 @@ impl BleScanner {
                                 | Some(CentralEvent::DeviceUpdated(pid)) => {
                                     if let Ok(peripheral) = adapter.peripheral(&pid).await {
                                         let id = pid.to_string();
-                                        if let Some(device) = extract_device(id.clone(), &peripheral).await {
+                                        if let Some(mut device) = extract_device(id.clone(), &peripheral).await {
                                             let mut state = inner.lock().await;
+                                            // Preserve previously known name if new advertisement lacks one
+                                            if device.name == "Unknown" {
+                                                if let Some(existing) = state.devices.get(&id) {
+                                                    if existing.name != "Unknown" {
+                                                        device.name = existing.name.clone();
+                                                    }
+                                                }
+                                            }
+                                            // Preserve previously known services if new advertisement has none
+                                            if device.services.is_empty() {
+                                                if let Some(existing) = state.devices.get(&id) {
+                                                    if !existing.services.is_empty() {
+                                                        device.services = existing.services.clone();
+                                                    }
+                                                }
+                                            }
                                             state.devices.insert(id, device);
                                             dirty = true;
 
@@ -167,10 +195,15 @@ impl BleScanner {
                                 _ => {}
                             }
                         }
-                        // Periodic flush for debounced events
+                        // Periodic flush for debounced events + stale device pruning
                         _ = tokio::time::sleep(tokio::time::Duration::from_millis(500)) => {
+                            let mut state = inner.lock().await;
+                            let before = state.devices.len();
+                            Self::prune_stale(&mut state.devices);
+                            if state.devices.len() != before {
+                                dirty = true;
+                            }
                             if dirty {
-                                let state = inner.lock().await;
                                 let devices: Vec<BleDevice> = state.devices.values().cloned().collect();
                                 let _ = app.emit("ble-devices-updated", &devices);
                                 dirty = false;
@@ -193,10 +226,25 @@ impl BleScanner {
                                 let mut state = inner.lock().await;
                                 for p in peripherals {
                                     let id = p.id().to_string();
-                                    if let Some(device) = extract_device(id.clone(), &p).await {
+                                    if let Some(mut device) = extract_device(id.clone(), &p).await {
+                                        if device.name == "Unknown" {
+                                            if let Some(existing) = state.devices.get(&id) {
+                                                if existing.name != "Unknown" {
+                                                    device.name = existing.name.clone();
+                                                }
+                                            }
+                                        }
+                                        if device.services.is_empty() {
+                                            if let Some(existing) = state.devices.get(&id) {
+                                                if !existing.services.is_empty() {
+                                                    device.services = existing.services.clone();
+                                                }
+                                            }
+                                        }
                                         state.devices.insert(id, device);
                                     }
                                 }
+                                Self::prune_stale(&mut state.devices);
                                 let devices: Vec<BleDevice> = state.devices.values().cloned().collect();
                                 let _ = app.emit("ble-devices-updated", &devices);
                             }
