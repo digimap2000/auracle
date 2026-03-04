@@ -1,4 +1,5 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
 import {
   type BleDevice,
   type ConnectedDevice,
@@ -6,8 +7,9 @@ import {
   connectDevice,
   disconnectDevice,
   getConnectedDevices,
-  scanBleDevices,
   scanSerialPorts,
+  startBleScan,
+  stopBleScan,
 } from "@/lib/tauri";
 
 interface DevicesState {
@@ -27,18 +29,55 @@ export function useDevices() {
     error: null,
   });
 
-  const scan = useCallback(async () => {
+  // Listen to live BLE device updates from backend
+  useEffect(() => {
+    const unlisten = listen<BleDevice[]>("ble-devices-updated", (event) => {
+      setState((prev) => ({ ...prev, bleDevices: event.payload }));
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, []);
+
+  // Stop scanning on unmount
+  useEffect(() => {
+    return () => {
+      stopBleScan().catch(() => {});
+    };
+  }, []);
+
+  const startScan = useCallback(async () => {
     setState((s) => ({ ...s, scanning: true, error: null }));
     try {
-      const [ble, serial] = await Promise.all([
-        scanBleDevices(),
-        scanSerialPorts(),
-      ]);
-      setState((s) => ({ ...s, bleDevices: ble, serialPorts: serial, scanning: false }));
+      await startBleScan();
     } catch (e) {
       setState((s) => ({
         ...s,
         scanning: false,
+        error: e instanceof Error ? e.message : String(e),
+      }));
+    }
+  }, []);
+
+  const stopScan = useCallback(async () => {
+    try {
+      await stopBleScan();
+    } catch (e) {
+      setState((s) => ({
+        ...s,
+        error: e instanceof Error ? e.message : String(e),
+      }));
+    }
+    setState((s) => ({ ...s, scanning: false }));
+  }, []);
+
+  const refreshSerialPorts = useCallback(async () => {
+    try {
+      const ports = await scanSerialPorts();
+      setState((s) => ({ ...s, serialPorts: ports }));
+    } catch (e) {
+      setState((s) => ({
+        ...s,
         error: e instanceof Error ? e.message : String(e),
       }));
     }
@@ -84,7 +123,9 @@ export function useDevices() {
 
   return {
     ...state,
-    scan,
+    startScan,
+    stopScan,
+    refreshSerialPorts,
     connect,
     disconnect,
     refreshConnected,

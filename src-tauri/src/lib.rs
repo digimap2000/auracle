@@ -3,14 +3,27 @@ mod devices;
 mod error;
 mod serial;
 
-use ble::BleDevice;
+use ble::{BleScanner, BluetoothAdapter};
 use devices::ConnectedDevice;
 use error::AuracleError;
 use serial::SerialPort;
 
 #[tauri::command]
-async fn scan_ble_devices() -> Vec<BleDevice> {
-    ble::scan().await
+async fn get_bluetooth_adapter() -> Result<BluetoothAdapter, AuracleError> {
+    ble::get_adapter().await
+}
+
+#[tauri::command]
+async fn start_ble_scan(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, BleScanner>,
+) -> Result<(), AuracleError> {
+    state.start_scan(app).await
+}
+
+#[tauri::command]
+async fn stop_ble_scan(state: tauri::State<'_, BleScanner>) -> Result<(), AuracleError> {
+    state.stop_scan().await
 }
 
 #[tauri::command]
@@ -51,6 +64,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_process::init())
+        .manage(BleScanner::new())
         .setup(|app| {
             #[cfg(desktop)]
             app.handle()
@@ -58,11 +72,13 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            scan_ble_devices,
-            scan_serial_ports,
             connect_device,
             disconnect_device,
+            get_bluetooth_adapter,
             get_connected_devices,
+            scan_serial_ports,
+            start_ble_scan,
+            stop_ble_scan,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Auracle");

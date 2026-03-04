@@ -19,6 +19,12 @@ pub enum AuracleError {
     CommandFailed(String),
 }
 
+impl From<btleplug::Error> for AuracleError {
+    fn from(e: btleplug::Error) -> Self {
+        AuracleError::Ble(e.to_string())
+    }
+}
+
 impl Serialize for AuracleError {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where

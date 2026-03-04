@@ -1,10 +1,37 @@
 import { invoke } from "@tauri-apps/api/core";
 
+export interface BluetoothAdapter {
+  id: string;
+  name: string;
+  is_available: boolean;
+}
+
+export async function getBluetoothAdapter(): Promise<BluetoothAdapter> {
+  return invoke<BluetoothAdapter>("get_bluetooth_adapter");
+}
+
+export interface ManufacturerData {
+  company_id: number;
+  data: number[];
+}
+
 export interface BleDevice {
   id: string;
   name: string;
   rssi: number;
   is_connected: boolean;
+  tx_power: number | null;
+  services: string[];
+  manufacturer_data: ManufacturerData[];
+  last_seen: string;
+}
+
+export async function startBleScan(): Promise<void> {
+  return invoke<void>("start_ble_scan");
+}
+
+export async function stopBleScan(): Promise<void> {
+  return invoke<void>("stop_ble_scan");
 }
 
 export interface SerialPort {
@@ -19,10 +46,6 @@ export interface ConnectedDevice {
   name: string;
   device_type: string;
   firmware_version: string;
-}
-
-export async function scanBleDevices(): Promise<BleDevice[]> {
-  return invoke<BleDevice[]>("scan_ble_devices");
 }
 
 export async function scanSerialPorts(): Promise<SerialPort[]> {

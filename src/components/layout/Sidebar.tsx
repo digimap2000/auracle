@@ -5,8 +5,17 @@ import {
   Settings2,
   ScrollText,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { Separator } from "@/components/ui/separator";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarSeparator,
+} from "@/components/ui/sidebar";
 
 const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
@@ -15,34 +24,33 @@ const navItems = [
   { to: "/logs", icon: ScrollText, label: "Logs" },
 ] as const;
 
-export function Sidebar() {
+export function AppSidebar() {
   return (
-    <aside className="flex h-full w-[220px] shrink-0 flex-col border-r bg-background">
-      <div className="flex h-12 items-center px-4">
-        <span className="font-mono text-sm font-semibold tracking-tight text-foreground">
+    <Sidebar collapsible="none">
+      <SidebarHeader className="h-12 justify-center px-4">
+        <span className="font-mono text-sm font-semibold tracking-tight">
           Auracle
         </span>
-      </div>
-      <Separator />
-      <nav className="flex flex-col gap-0.5 p-2">
-        {navItems.map(({ to, icon: Icon, label }) => (
-          <NavLink
-            key={to}
-            to={to}
-            className={({ isActive }) =>
-              cn(
-                "flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] font-medium transition-colors",
-                isActive
-                  ? "bg-secondary text-foreground"
-                  : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
-              )
-            }
-          >
-            <Icon size={14} />
-            {label}
-          </NavLink>
-        ))}
-      </nav>
-    </aside>
+      </SidebarHeader>
+      <SidebarSeparator />
+      <SidebarContent>
+        <SidebarGroup className="p-2">
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {navItems.map(({ to, icon: Icon, label }) => (
+                <SidebarMenuItem key={to}>
+                  <SidebarMenuButton asChild size="sm">
+                    <NavLink to={to}>
+                      <Icon size={14} />
+                      <span>{label}</span>
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
+    </Sidebar>
   );
 }
