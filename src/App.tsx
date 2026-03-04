@@ -6,9 +6,11 @@ import { Devices } from "@/pages/Devices";
 import { StreamConfig } from "@/pages/StreamConfig";
 import { Logs } from "@/pages/Logs";
 import { useDevices } from "@/hooks/useDevices";
+import { useUpdater } from "@/hooks/useUpdater";
 
 export default function App() {
   const { connectedDevices, scanning, scan } = useDevices();
+  const updater = useUpdater();
 
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-background">
@@ -31,7 +33,7 @@ export default function App() {
           </Routes>
         </main>
       </div>
-      <StatusBar connectedCount={connectedDevices.length} />
+      <StatusBar connectedCount={connectedDevices.length} updater={updater} />
     </div>
   );
 }
