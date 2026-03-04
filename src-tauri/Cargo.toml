@@ -1,7 +1,7 @@
 [package]
 name = "auracle"
 version = "0.1.0"
-description = "Auracle — BLE and serial device manager"
+description = "Focal and Naim Auracle — BLE and serial device manager"
 authors = ["Naim Audio"]
 edition = "2021"
 

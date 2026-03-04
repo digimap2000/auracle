@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Auracle",
+  "productName": "Focal and Naim Auracle",
   "version": "0.1.0",
   "identifier": "com.auracle.desktop",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Auracle",
+        "title": "Focal and Naim Auracle",
         "width": 1280,
         "height": 800,
         "minWidth": 960,
