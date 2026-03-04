@@ -20,66 +20,49 @@ Initialises three hooks at the top level:
 
 Layout structure:
 ```
-<SidebarProvider>
-  <AppSidebar />
-  <SidebarInset>
+<div flex h-screen w-screen>
+  <ActivityRail />
+  <div flex-1 flex-col>
     <main>
       <Routes> ... </Routes>
     </main>
     <StatusBar />
-  </SidebarInset>
-</SidebarProvider>
+  </div>
+</div>
 ```
 
 ## Routing
 
 | Path | Component | Props |
 |------|-----------|-------|
-| `/` | `Dashboard` | `connectedCount: number`, `bluetoothAdapter: { adapter, loading, error, refresh }` |
-| `/devices` | `Devices` | `bleDevices: BleDevice[]`, `scanning: boolean`, `onStartScan: () => void`, `onStopScan: () => void` |
-| `/stream-config` | `StreamConfig` | none |
-| `/logs` | `Logs` | none |
+| `/` | `Home` | `bleDevices: BleDevice[]`, `scanning: boolean`, `onStartScan: () => void`, `onStopScan: () => void` |
+| `/browse` | `Devices` | none |
+| `/generate` | `StreamConfig` | none |
+| `/compliance` | `Compliance` | none |
 
 All routes are defined in `src/App.tsx` using `<Routes>` and `<Route>`.
 
 ## Pages
 
-### Dashboard (`src/pages/Dashboard.tsx`)
+### Home (`src/pages/Home.tsx`)
 
-Shows three stat cards in a 3-column grid:
-- **Bluetooth Adapter** — shows adapter status via `bluetoothAdapter` prop (Bluetooth icon). Loading state uses Skeleton, error state shows message with Retry button, available state shows adapter name with green badge.
-- **Connected Devices** — displays `connectedCount` prop (Radio icon)
-- **Active Streams** — hardcoded to `0` (Activity icon)
+Live Bluetooth device list. Auto-scans on mount, stops on unmount. No Header or toolbar — just the device card list.
 
-Below the stats: an empty-state card with "No active streams" message.
+**Auto-scan**: `useEffect` calls `onStartScan()` on mount, `onStopScan()` on unmount. A tick timer updates relative times every second.
 
-**Status**: Bluetooth adapter card is live (uses real btleplug data). Active streams count is hardcoded.
+**Empty state**: Centred pulsing Bluetooth icon + "Scanning for devices..." text.
+
+**Device list**: `ScrollArea` containing `DeviceCard` components in a `max-w-2xl mx-auto` column with `space-y-3` gaps. Sorted alphabetically by name (case-insensitive), "Unknown" at bottom, RSSI as tiebreaker within Unknown. Sort is stable — list never reorders as RSSI fluctuates.
+
+**Expand/collapse**: `expandedId` state implements accordion behaviour — clicking a card expands it (showing service table, manufacturer data, TX power, peripheral ID), clicking again collapses it. Only one card can be expanded at a time.
+
+**Status**: Live — uses real btleplug data via `ble-devices-updated` events.
 
 ### Devices (`src/pages/Devices.tsx`)
 
-Two-panel BLE explorer. Left panel: device list. Right panel: detail pane.
+Stub page at `/browse`. Shows Header "Browse" with description "Service browser" and centred empty state: Search icon + "Service browser coming soon".
 
-**Toolbar**:
-- Start/Stop toggle button: "Start Scan" (Play icon, primary) / "Stop" (Square icon, destructive)
-- Filter input: instant client-side filter by name or ID (uses `useState` + `useMemo`)
-- Device count: "{N} devices" in muted text. Shows pulsing "Scanning" badge when active.
-
-**Device list (left panel)**:
-- ScrollArea containing rows sorted alphabetically by name ("Unknown" pushed to bottom), RSSI as tiebreaker
-- Each row: device name (or "Unknown" in italic), RSSI with colour coding (green > -50, yellow -50 to -70, red < -70), relative time since last seen
-- Selected row has `bg-accent/50` + left border accent
-- Rows dim (50% opacity) when stale (>30 seconds since last seen)
-
-**Detail pane (right panel)**:
-- Empty state: "Select a device to view details" with Bluetooth icon
-- When selected: Header (name + platform-aware ID label — "Peripheral ID (macOS)" on Mac, "MAC Address" elsewhere), Signal (RSSI + TX power), Services (UUID always shown in monospace, with name badge alongside when resolved from SIG standard or custom UUIDs — duplicates are shown faithfully, never deduplicated), Manufacturer Data (company name lookup from full SIG database via `src/data/ble-company-ids.json` + hex dump), Timing (last seen)
-- Reactively updates as new scan data arrives for the selected device
-
-**Empty state** (no scan run): "Click Start Scan to discover nearby Bluetooth devices"
-
-**Scanning indicator**: Subtle ring around content area (`ring-1 ring-primary/20`)
-
-**Status**: Live — uses real btleplug data via `ble-devices-updated` events.
+**Status**: Stub — no functionality. Will be rebuilt as a service browser in a future feature.
 
 ### StreamConfig (`src/pages/StreamConfig.tsx`)
 
@@ -92,38 +75,39 @@ Audio stream configuration form inside a Card (max-w-lg):
 
 **Status**: UI complete. Form is not connected to state or backend. All inputs are uncontrolled. Start Stream button is permanently disabled.
 
+### Compliance (`src/pages/Compliance.tsx`)
+
+Stub page at `/compliance`. Shows Header "Compliance" with description "LE Audio certification test runner" and centred empty state: ClipboardCheck icon + "Compliance test runner coming soon".
+
+**Status**: Stub — no functionality.
+
 ### Logs (`src/pages/Logs.tsx`)
 
-Application event log viewer:
+Application event log viewer (no route — will be reintegrated as a panel within activities later):
 - **Toolbar** — Clear button (ghost), Export button (ghost, disabled)
 - **Log list** — ScrollArea with monospace rows showing timestamp, level badge, message
 - **Timestamp format** — `HH:MM:SS.mmm` via `formatTimestamp()` helper
 
 Uses mock data (3 entries). Log levels: `info`, `warn`, `error` rendered as Badge variants.
 
-**Status**: UI complete. Uses hardcoded mock data. Clear button is not wired. Export is disabled.
+**Status**: UI complete. Uses hardcoded mock data. No route mapped.
 
 ## Layout Components
 
-### AppSidebar (`src/components/layout/Sidebar.tsx`)
+### ActivityRail (`src/components/layout/ActivityRail.tsx`)
 
-Fixed-width (220px) sidebar using shadcn/ui Sidebar primitives. `collapsible="none"`.
+Fixed-width (72px) vertical navigation rail using plain `<nav>` with Tailwind styling. Not collapsible.
 
-Structure:
-- `SidebarHeader` — "Auracle" branding in monospace font
-- `SidebarSeparator`
-- `SidebarContent` → `SidebarGroup` → `SidebarMenu`
+Activities:
 
-Navigation items:
+| Route | Icon | Label |
+|-------|------|-------|
+| `/` | `Bluetooth` | Home |
+| `/browse` | `Search` | Browse |
+| `/generate` | `Radio` | Generate |
+| `/compliance` | `ClipboardCheck` | Compliance |
 
-| Path | Icon | Label |
-|------|------|-------|
-| `/` | `LayoutDashboard` | Dashboard |
-| `/devices` | `Radio` | Devices |
-| `/stream-config` | `Settings2` | Stream Config |
-| `/logs` | `ScrollText` | Logs |
-
-Each item uses `SidebarMenuButton asChild` wrapping a `NavLink`. Active state styling is handled by the shadcn sidebar's `data-active` attribute reacting to NavLink's active class.
+Each item is a `NavLink` with `end` prop on `/`. Icon (16px) above label (`text-[10px] font-medium`). Active state: left-2 primary border + `text-foreground`. Inactive: `text-muted-foreground`. Hover: `bg-secondary rounded-md`.
 
 ### Header (`src/components/layout/Header.tsx`)
 
@@ -133,7 +117,7 @@ Props:
 - `title: string` (required) — rendered as `<h1>` in text-sm font-medium
 - `description?: string` — rendered as `<p>` in text-[11px] text-muted-foreground
 
-Used by all 4 pages.
+Used by all pages.
 
 ### StatusBar (`src/components/layout/StatusBar.tsx`)
 
@@ -152,6 +136,45 @@ Bottom bar (h-8) with top border. Three sections:
 - Version label: `v0.1.0` in monospace
 
 Props: `connectedCount: number`, `updater: ReturnType<typeof useUpdater>`, `bluetoothAdapter: { adapter, loading, error }`
+
+## Device Components
+
+### DeviceCard (`src/components/devices/DeviceCard.tsx`)
+
+Clickable card for a single BLE device with dual-state header and expand/collapse detail.
+
+Props: `device: BleDevice`, `expanded: boolean`, `onToggle: () => void`.
+
+**Collapsed header**:
+- **Line 1**: SignalBars + device name (left), up to 2 service badges with overflow count (right). Badge priority: Auracast (default) > Audio Stream > BA Scan > PAC > BAP > alphabetical. Overflow shown as "+N more" secondary badge.
+- **Line 2**: manufacturer company name only. Omitted if no manufacturer data.
+
+**Expanded header** (badges replaced):
+- **Line 1**: SignalBars + device name (left), device ID in monospace + RSSI in coloured monospace (right).
+- **Line 2**: manufacturer company name + hex company ID. Omitted if no manufacturer data.
+
+**Expanded detail** (smooth CSS grid height animation, below header):
+- Services table only: Service name, UUID (monospace), Type badge (Standard/Custom via `isStandardUuid`). No section heading — table column header "Service" is self-explanatory. No manufacturer data, TX power, or peripheral ID sections (those are in the header).
+
+Outer: `rounded-lg border bg-card p-3 cursor-pointer`. Hover: `border-muted-foreground/30`.
+
+### SignalBars (`src/components/devices/SignalBars.tsx`)
+
+4-bar signal strength indicator. Bar heights: 4px, 8px, 12px, 16px. Color and active bar count based on RSSI thresholds (green > -50, green > -60, yellow > -70, red otherwise).
+
+## Shared Utilities
+
+### ble-utils (`src/lib/ble-utils.ts`)
+
+Shared BLE utility functions and lookup maps:
+- `KNOWN_SERVICES` — map of UUID → service name (including Focal Naim Auracast)
+- `resolveServiceName(uuid)` — resolve UUID to name or return UUID as-is
+- `resolveCompanyName(id)` — resolve company ID from SIG database (`src/data/ble-company-ids.json`)
+- `formatHexBytes(bytes)` — format byte array as hex string
+- `rssiColor(rssi)` — return Tailwind color class for RSSI value
+- `relativeTime(isoString)` — format ISO timestamp as "now", "Xs ago", "Xm ago", etc.
+- `isStale(isoString)` — true if >30 seconds since timestamp
+- `isStandardUuid(uuid)` — true if UUID matches Bluetooth SIG base UUID pattern
 
 ## Hooks
 
@@ -240,7 +263,7 @@ All in `src/components/ui/`. These are shadcn/ui components using the new-york s
 1. Create `src/pages/NewPage.tsx` exporting a named function component
 2. Use `<Header title="..." />` as the first child
 3. Add a route in `src/App.tsx` inside `<Routes>`
-4. Add a nav item to the `navItems` array in `src/components/layout/Sidebar.tsx` with path, Lucide icon, and label
+4. Add an activity item to the `activities` array in `src/components/layout/ActivityRail.tsx` with route, Lucide icon, and label
 
 ### Adding a new Tauri command (frontend side)
 

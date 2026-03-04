@@ -1,11 +1,10 @@
 import { Routes, Route } from "react-router-dom";
-import { AppSidebar } from "@/components/layout/Sidebar";
+import { ActivityRail } from "@/components/layout/ActivityRail";
 import { StatusBar } from "@/components/layout/StatusBar";
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
-import { Dashboard } from "@/pages/Dashboard";
+import { Home } from "@/pages/Home";
 import { Devices } from "@/pages/Devices";
 import { StreamConfig } from "@/pages/StreamConfig";
-import { Logs } from "@/pages/Logs";
+import { Compliance } from "@/pages/Compliance";
 import { useBluetoothAdapter } from "@/hooks/useBluetoothAdapter";
 import { useDevices } from "@/hooks/useDevices";
 import { useUpdater } from "@/hooks/useUpdater";
@@ -16,24 +15,15 @@ export default function App() {
   const updater = useUpdater();
 
   return (
-    <SidebarProvider>
-      <AppSidebar />
-      <SidebarInset className="flex flex-col overflow-hidden">
+    <div className="flex h-screen w-screen overflow-hidden">
+      <ActivityRail />
+      <div className="flex flex-1 flex-col overflow-hidden">
         <main className="flex flex-1 flex-col overflow-hidden">
           <Routes>
             <Route
               path="/"
               element={
-                <Dashboard
-                  connectedCount={connectedDevices.length}
-                  bluetoothAdapter={bluetoothAdapter}
-                />
-              }
-            />
-            <Route
-              path="/devices"
-              element={
-                <Devices
+                <Home
                   bleDevices={bleDevices}
                   scanning={scanning}
                   onStartScan={startScan}
@@ -41,8 +31,9 @@ export default function App() {
                 />
               }
             />
-            <Route path="/stream-config" element={<StreamConfig />} />
-            <Route path="/logs" element={<Logs />} />
+            <Route path="/browse" element={<Devices />} />
+            <Route path="/generate" element={<StreamConfig />} />
+            <Route path="/compliance" element={<Compliance />} />
           </Routes>
         </main>
         <StatusBar
@@ -50,7 +41,7 @@ export default function App() {
           updater={updater}
           bluetoothAdapter={bluetoothAdapter}
         />
-      </SidebarInset>
-    </SidebarProvider>
+      </div>
+    </div>
   );
 }
