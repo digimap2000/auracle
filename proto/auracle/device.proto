@@ -1,0 +1,34 @@
+message DeviceIdentity {
+  // Human-readable name of the device specification
+  // used within the desktop application.
+  string name = 1;
+
+  // Default Bluetooth Local Name that the device will advertise.
+  // UTF-8 string under normal operation.
+  string local_name = 2;
+
+  // Which Bluetooth radio systems the device implements.
+  RadioType radio = 3;
+
+  // Intended Bluetooth Core Specification version
+  // (format typically "major.minor", e.g. "5.4").
+  string core_spec_version = 4;
+
+  int appearance = 5;
+
+  // Optional descriptive text for documentation.
+  string description = 6;
+}
+
+enum RadioType {
+  RADIO_UNSPECIFIED = 0;
+
+  // Bluetooth Low Energy only
+  LE = 1;
+
+  // Classic Bluetooth (BR/EDR)
+  CLASSIC = 2;
+
+  // Dual-mode controller supporting both stacks
+  DUAL_MODE = 3;
+}

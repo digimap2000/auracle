@@ -59,7 +59,7 @@ Project-specific skills live in `.skills/`. Read the relevant skill before start
 ## Architecture Rules
 
 - **Rust owns all domain logic.** Tauri commands are a thin translation layer — no business logic in command handlers.
-- **TypeScript mirrors Rust types exactly.** Interfaces in `src/lib/tauri.ts` match Rust structs from `docs/data-models.md`.
+- **TypeScript mirrors Rust types exactly.** Interfaces in `frontend/src/lib/tauri.ts` match Rust structs from `docs/data-models.md`.
 - **Hooks own state and data fetching.** Pages own composition and layout. No data fetching in pages, no JSX in hooks.
 - **Failures always surface to the UI.** Never silently swallow errors. Error messages must be specific and actionable.
 - **This is a test tool.** Never hide, deduplicate, or sanitise data reported by devices. If firmware sends duplicates or unexpected values, show them exactly as received. Bugs in device firmware are what this tool exists to find.
@@ -77,27 +77,27 @@ Project-specific skills live in `.skills/`. Read the relevant skill before start
 
 ### Adding a Tauri command (full stack)
 1. Rust: define `#[tauri::command] async fn` in `lib.rs`, register in `generate_handler!`
-2. TypeScript: add invoke wrapper in `src/lib/tauri.ts`
-3. Hook: consume the wrapper in the appropriate hook in `src/hooks/`
+2. TypeScript: add invoke wrapper in `frontend/src/lib/tauri.ts`
+3. Hook: consume the wrapper in the appropriate hook in `frontend/src/hooks/`
 4. Types: ensure Rust struct and TS interface match per `docs/data-models.md`
 
 ### Adding a page
-1. Create `src/pages/MyPage.tsx` with `<Header>` as first child
-2. Add route in `src/App.tsx`
-3. Add nav item in `src/components/layout/Sidebar.tsx`
+1. Create `frontend/src/pages/MyPage.tsx` with `<Header>` as first child
+2. Add route in `frontend/src/App.tsx`
+3. Add nav item in `frontend/src/components/layout/Sidebar.tsx`
 
 ### Adding a shadcn component
 ```bash
-npx shadcn@latest add [component-name]
+cd frontend && npx shadcn@latest add [component-name]
 ```
 
 ## Build Commands
 
 ```bash
-npm run dev          # Vite dev server on port 1420
-npm run build        # TypeScript check + Vite production build
-cargo build          # Rust backend (from src-tauri/)
-cargo tauri dev      # Full Tauri dev mode (frontend + backend)
+npm run --prefix frontend dev    # Vite dev server on port 1420
+npm run --prefix frontend build  # TypeScript check + Vite production build
+cargo build                      # Rust backend (from src-tauri/)
+cargo tauri dev                  # Full Tauri dev mode (frontend + backend)
 ```
 
 ## Current Status

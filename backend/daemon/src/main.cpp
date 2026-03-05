@@ -1,7 +1,11 @@
 #include <inventory/inventory.hpp>
+#include <inventory/probe_scheduler.hpp>
+#include <inventory/probers/host_bluetooth_prober.hpp>
+#include <inventory/providers/host_bluetooth_provider.hpp>
 #include <inventory/providers/serial_provider.hpp>
 #include <rpc/inventory_service.hpp>
 
+#include <dts/bluetooth.hpp>
 #include <dts/log.hpp>
 #include <dts/serial.hpp>
 
@@ -11,6 +15,7 @@
 #include <chrono>
 #include <csignal>
 #include <cstdlib>
+#include <memory>
 #include <thread>
 
 namespace {
@@ -36,11 +41,26 @@ int main(int /*argc*/, char* /*argv*/[]) {
     // --- inventory layer ---
     auracle::inventory::InventoryRegistry registry;
 
+    // Serial provider
     dts::serial::monitor serial_monitor;
     auracle::inventory::SerialCandidateProvider serial_provider(serial_monitor, registry);
 
+    // Host Bluetooth provider
+    dts::bluetooth::monitor bt_monitor;
+    auracle::inventory::HostBluetoothCandidateProvider bt_provider(bt_monitor, registry);
+
+    // Probe scheduler
+    auracle::inventory::ProbeScheduler probe_scheduler(registry);
+    probe_scheduler.add_prober(
+        auracle::inventory::Transport::HostBluetooth,
+        std::make_unique<auracle::inventory::HostBluetoothProber>());
+
+    // Start everything
     serial_provider.start();
     serial_monitor.start(dts::serial::start_options{.emit_initial_snapshot = true});
+    bt_provider.start();
+    bt_monitor.start(dts::bluetooth::start_options{.emit_initial_snapshot = true});
+    probe_scheduler.start();
 
     // --- gRPC server ---
     auracle::rpc::InventoryServiceImpl inventory_svc(registry);
@@ -61,6 +81,9 @@ int main(int /*argc*/, char* /*argv*/[]) {
     dts::log::info(log_tag, "shutting down");
 
     server->Shutdown(std::chrono::system_clock::now() + std::chrono::seconds(2));
+    probe_scheduler.stop();
+    bt_monitor.stop();
+    bt_provider.stop();
     serial_monitor.stop();
     serial_provider.stop();
 

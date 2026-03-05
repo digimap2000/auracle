@@ -27,6 +27,11 @@ namespace {
     if (c.has_mdns()) {
         return std::format("{}:{}", c.mdns().host(), c.mdns().port());
     }
+    if (c.has_host_bluetooth()) {
+        const auto& bt = c.host_bluetooth();
+        return std::format("{} [{}] {}", bt.name(), bt.address(),
+            bt.powered() ? "powered" : "off");
+    }
     return {};
 }
 

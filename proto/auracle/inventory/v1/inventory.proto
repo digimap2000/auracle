@@ -12,11 +12,13 @@ enum Transport {
     TRANSPORT_UNSPECIFIED = 0;
     TRANSPORT_SERIAL = 1;
     TRANSPORT_MDNS = 2;
+    TRANSPORT_HOST_BLUETOOTH = 3;
 }
 
 enum HardwareKind {
     HARDWARE_KIND_UNSPECIFIED = 0;
     HARDWARE_KIND_NRF5340_AUDIO_DK = 1;
+    HARDWARE_KIND_HOST_BLUETOOTH_ADAPTER = 2;
 }
 
 // ---------------------------------------------------------------------------
@@ -37,6 +39,13 @@ message MdnsDetails {
     string instance = 2;
     string host = 3;
     uint32 port = 4;
+}
+
+message HostBluetoothDetails {
+    string adapter_key = 1;
+    string name = 2;
+    string address = 3;
+    bool powered = 4;
 }
 
 // ---------------------------------------------------------------------------
@@ -71,6 +80,7 @@ message HardwareCandidate {
     oneof details {
         SerialDetails serial = 6;
         MdnsDetails mdns = 7;
+        HostBluetoothDetails host_bluetooth = 8;
     }
 }
 

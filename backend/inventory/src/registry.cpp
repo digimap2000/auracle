@@ -49,8 +49,54 @@ void InventoryRegistry::mark_candidate_gone(const CandidateId& id) {
 }
 
 void InventoryRegistry::submit_probe_result(
-    const CandidateId& /*id*/, const ProbeResult& /*result*/) {
-    // Future: convert candidate to unit based on probe result
+    const CandidateId& id, const ProbeResult& result) {
+    if (result.outcome != ProbeOutcome::Supported) {
+        return;
+    }
+
+    InventoryEvent event;
+
+    {
+        std::scoped_lock lock(mutex_);
+
+        auto cand_it = candidates_.find(id);
+        if (cand_it == candidates_.end()) {
+            return;
+        }
+
+        UnitId unit_id{id.value};
+        auto unit_it = units_.find(unit_id);
+
+        if (unit_it == units_.end()) {
+            HardwareUnit unit{
+                .id = unit_id,
+                .kind = result.kind,
+                .present = result.present,
+                .bound_candidate = id,
+                .identity = result.identity,
+                .lease = std::nullopt,
+            };
+            units_.emplace(unit_id, unit);
+            event = UnitAdded{unit};
+        } else {
+            auto& existing = unit_it->second;
+            const bool was_present = existing.present;
+
+            existing.kind = result.kind;
+            existing.identity = result.identity;
+            existing.present = result.present;
+
+            if (!was_present && result.present) {
+                event = UnitOnline{unit_id};
+            } else if (was_present && !result.present) {
+                event = UnitOffline{unit_id};
+            } else {
+                event = UnitUpdated{existing};
+            }
+        }
+    }
+
+    on_event.emit(event);
 }
 
 std::vector<HardwareCandidate> InventoryRegistry::list_candidates(bool include_gone) const {

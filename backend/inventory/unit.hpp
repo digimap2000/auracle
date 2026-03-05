@@ -19,6 +19,7 @@ struct ProbeResult {
     ProbeOutcome outcome{};
     HardwareKind kind{};
     Identity identity;
+    bool present{true};
 };
 
 struct Lease {

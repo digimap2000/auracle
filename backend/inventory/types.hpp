@@ -33,11 +33,13 @@ struct LeaseToken {
 enum class Transport {
     Serial,
     Mdns,
+    HostBluetooth,
 };
 
 enum class HardwareKind {
     Unknown,
     Nrf5340AudioDK,
+    HostBluetoothAdapter,
 };
 
 enum class ProbeOutcome {
@@ -66,7 +68,14 @@ struct MdnsDetails {
     std::uint16_t port{0};
 };
 
-using CandidateDetails = std::variant<SerialDetails, MdnsDetails>;
+struct HostBluetoothDetails {
+    std::string adapter_key;
+    std::string name;
+    std::string address;
+    bool powered{false};
+};
+
+using CandidateDetails = std::variant<SerialDetails, MdnsDetails, HostBluetoothDetails>;
 
 } // namespace auracle::inventory
 

@@ -15,7 +15,8 @@ namespace {
 [[nodiscard]] proto::Transport to_proto_transport(inventory::Transport t) {
     switch (t) {
     case inventory::Transport::Serial: return proto::TRANSPORT_SERIAL;
-    case inventory::Transport::Mdns:   return proto::TRANSPORT_MDNS;
+    case inventory::Transport::Mdns:           return proto::TRANSPORT_MDNS;
+    case inventory::Transport::HostBluetooth:  return proto::TRANSPORT_HOST_BLUETOOTH;
     }
     return proto::TRANSPORT_UNSPECIFIED;
 }
@@ -23,7 +24,8 @@ namespace {
 [[nodiscard]] proto::HardwareKind to_proto_kind(inventory::HardwareKind k) {
     switch (k) {
     case inventory::HardwareKind::Unknown:        return proto::HARDWARE_KIND_UNSPECIFIED;
-    case inventory::HardwareKind::Nrf5340AudioDK: return proto::HARDWARE_KIND_NRF5340_AUDIO_DK;
+    case inventory::HardwareKind::Nrf5340AudioDK:       return proto::HARDWARE_KIND_NRF5340_AUDIO_DK;
+    case inventory::HardwareKind::HostBluetoothAdapter: return proto::HARDWARE_KIND_HOST_BLUETOOTH_ADAPTER;
     }
     return proto::HARDWARE_KIND_UNSPECIFIED;
 }
@@ -44,6 +46,13 @@ void to_proto(const inventory::MdnsDetails& src, proto::MdnsDetails* dst) {
     dst->set_instance(src.instance);
     dst->set_host(src.host);
     dst->set_port(src.port);
+}
+
+void to_proto(const inventory::HostBluetoothDetails& src, proto::HostBluetoothDetails* dst) {
+    dst->set_adapter_key(src.adapter_key);
+    dst->set_name(src.name);
+    dst->set_address(src.address);
+    dst->set_powered(src.powered);
 }
 
 void to_proto(const inventory::Identity& src, proto::Identity* dst) {
@@ -72,8 +81,10 @@ void to_proto(const inventory::HardwareCandidate& src, proto::HardwareCandidate*
         using T = std::decay_t<decltype(details)>;
         if constexpr (std::is_same_v<T, inventory::SerialDetails>) {
             to_proto(details, dst->mutable_serial());
-        } else {
+        } else if constexpr (std::is_same_v<T, inventory::MdnsDetails>) {
             to_proto(details, dst->mutable_mdns());
+        } else if constexpr (std::is_same_v<T, inventory::HostBluetoothDetails>) {
+            to_proto(details, dst->mutable_host_bluetooth());
         }
     }, src.details);
 }
