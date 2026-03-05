@@ -15,7 +15,7 @@ Read `docs/data-models.md` for exact type definitions and `docs/backend.md` for 
 
 The host machine's built-in Bluetooth is always present in the device list if the OS grants permission. It's not an external device — it's the machine itself.
 
-- **macOS**: Bluetooth 5.3 via CoreBluetooth, accessed through btleplug. Requires `NSBluetoothAlwaysUsageDescription` in `Info.plist` (in `src-tauri/Info.plist`).
+- **macOS**: Bluetooth 5.3 via CoreBluetooth, accessed through btleplug. Requires `NSBluetoothAlwaysUsageDescription` in `Info.plist` (in `frontend/src-tauri/Info.plist`).
 - **Windows**: WinRT Bluetooth APIs via btleplug, capabilities discovered at runtime.
 - **Primary use**: Verify that streams broadcast by external devices (like the nRF5340) are actually on-air and correctly configured.
 - **Permission handling**: If the OS denies Bluetooth access, surface this clearly in the UI — never crash or silently fail. The error message should tell the user exactly where to go to fix it (e.g., "Bluetooth permission denied — enable in System Settings > Privacy & Security > Bluetooth").
@@ -43,7 +43,7 @@ Nordic's reference board for LE Audio / Auracast development. Dual-core (app + n
 
 ## The AuracleDevice Trait
 
-All device implementations implement this async trait, defined in `src-tauri/src/devices/mod.rs`:
+All device implementations implement this async trait, defined in `frontend/src-tauri/src/devices/mod.rs`:
 
 ```rust
 pub trait AuracleDevice {
@@ -80,10 +80,10 @@ pub struct ConnectedDevice {
 
 ## Adding a New Device
 
-1. Create `src-tauri/src/devices/my_device.rs`
+1. Create `frontend/src-tauri/src/devices/my_device.rs`
 2. Define a struct with at minimum: an `id`, a `name`, and a `connected` state
 3. Implement `AuracleDevice` for it
-4. Register the module in `src-tauri/src/devices/mod.rs`: `pub mod my_device;`
+4. Register the module in `frontend/src-tauri/src/devices/mod.rs`: `pub mod my_device;`
 5. Add it to the device registry (when the registry exists)
 
 The struct should handle its own connection details internally. The rest of the app interacts with it only through the trait.
@@ -173,7 +173,7 @@ On macOS, the first btleplug call triggers a system permission dialog. If the us
 2. Surface it with a helpful message
 3. Not retry in a loop — wait for the user to take action
 
-The `Info.plist` in `src-tauri/` must contain:
+The `Info.plist` in `frontend/src-tauri/` must contain:
 ```xml
 <key>NSBluetoothAlwaysUsageDescription</key>
 <string>Auracle needs Bluetooth to discover and communicate with audio devices</string>
@@ -213,7 +213,7 @@ The device registry will be a Tauri-managed state that tracks all known and conn
 
 ## Frontend Integration
 
-The Devices page (`src/pages/Devices.tsx`) and the `useDevices` hook (`src/hooks/useDevices.ts`) are the frontend counterparts. The hook calls:
+The Devices page (`frontend/src/pages/Devices.tsx`) and the `useDevices` hook (`frontend/src/hooks/useDevices.ts`) are the frontend counterparts. The hook calls:
 
 | Function | Command | Returns |
 |----------|---------|---------|

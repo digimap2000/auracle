@@ -6,3 +6,4 @@ build/
 *.env
 Thumbs.db
 .venv/
+*.tsbuildinfo

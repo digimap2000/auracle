@@ -1,11 +1,13 @@
 ---
 name: auracle-frontend
-description: "React/TypeScript frontend development for Auracle. Use this skill whenever writing, modifying, or reviewing TypeScript or React code in the src/ directory. Covers component patterns, hook architecture, Tauri invoke wrappers, shadcn/ui usage, design system tokens, routing, and layout. Trigger on any frontend work: new pages, new components, new hooks, styling changes, form wiring, or event handling."
+description: "React/TypeScript frontend development for Auracle. Use this skill whenever writing, modifying, or reviewing TypeScript or React code in the frontend/src/ directory. Covers component patterns, hook architecture, Tauri invoke wrappers, shadcn/ui usage, design system tokens, routing, and layout. Trigger on any frontend work: new pages, new components, new hooks, styling changes, form wiring, or event handling."
 ---
 
 # Auracle React Frontend
 
 This skill encodes the patterns and constraints for all frontend work in Auracle. The specs in `docs/frontend.md`, `docs/design-system.md`, and `docs/data-models.md` are the source of truth — read them before making changes if you haven't already this session.
+
+The frontend lives in `frontend/` at the repo root. The Tauri Rust shell lives in `frontend/src-tauri/`. All paths below are relative to `frontend/`.
 
 ## Architecture Rules
 
@@ -15,40 +17,54 @@ The frontend follows a strict layered architecture. Each layer has one job:
 Pages (composition) → Hooks (state + data) → Tauri Wrappers (IPC) → Backend
          ↓
   Components (UI primitives from shadcn/ui)
+         ↓
+  Feature components (e.g., devices/)
 ```
 
 - **Pages** compose components and consume hooks. They contain layout and conditional rendering but no data fetching or business logic.
 - **Hooks** own state and data fetching. One hook per feature area. They call Tauri wrappers and manage loading/error states. No JSX.
 - **Tauri wrappers** (`src/lib/tauri.ts`) are typed `invoke()` calls. One function per backend command. No state, no side effects.
 - **UI components** (`src/components/ui/`) are shadcn/ui primitives. Don't modify these unless adding a new variant.
+- **Feature components** (`src/components/devices/`, etc.) are domain-specific components used by pages. They receive data via props from hooks.
 
 ## Directory Structure
 
 ```
-src/
-├── components/
-│   ├── layout/          # App shell: Sidebar, Header, StatusBar
-│   └── ui/              # shadcn/ui primitives (don't modify without reason)
-├── hooks/               # One file per feature area
-├── lib/
-│   ├── tauri.ts         # Typed invoke wrappers + shared interfaces
-│   └── utils.ts         # cn() helper
-├── pages/               # One file per route
-├── App.tsx              # Root: routing, layout, hook initialisation
-├── index.css            # Design system tokens
-└── main.tsx             # Entry point
+frontend/
+├── src/
+│   ├── components/
+│   │   ├── devices/         # BLE device display: DeviceCard, SignalBars
+│   │   ├── layout/          # App shell: Sidebar, Header, StatusBar
+│   │   └── ui/              # shadcn/ui primitives (don't modify without reason)
+│   ├── data/
+│   │   └── ble-company-ids.json  # Bluetooth SIG company ID lookup (3,972 entries)
+│   ├── hooks/               # One file per feature area
+│   ├── lib/
+│   │   ├── ble-utils.ts     # BLE name resolution (company IDs, service UUIDs)
+│   │   ├── tauri.ts         # Typed invoke wrappers + shared interfaces
+│   │   └── utils.ts         # cn() helper
+│   ├── pages/               # One file per route
+│   ├── App.tsx              # Root: routing, layout, hook initialisation
+│   ├── index.css            # Design system tokens
+│   └── main.tsx             # Entry point
+├── src-tauri/               # Tauri Rust shell
+│   ├── tauri.conf.json      # Tauri build/app configuration
+│   ├── Cargo.toml           # Rust dependencies
+│   ├── src/                 # Rust backend code
+│   └── capabilities/        # Tauri permissions
+└── components.json          # shadcn/ui config
 ```
 
 ## TypeScript Rules
 
 Strict mode is mandatory. These are non-negotiable:
 - No `any` types, ever. Use `unknown` and narrow, or define a proper interface.
-- All Tauri IPC types have matching interfaces in `src/lib/tauri.ts` that mirror the Rust structs exactly.
+- All Tauri IPC types have matching interfaces in `frontend/src/lib/tauri.ts` that mirror the Rust structs exactly.
 - Tauri auto-camelCases Rust's snake_case fields, so `device_type` in Rust becomes `deviceType` in TypeScript. However, interface field names in `tauri.ts` use snake_case to match the Rust structs as documented in `docs/data-models.md`. Check the existing patterns.
 
 ## Adding a Tauri Invoke Wrapper
 
-When a new backend command is added, create its frontend counterpart in `src/lib/tauri.ts`:
+When a new backend command is added, create its frontend counterpart in `frontend/src/lib/tauri.ts`:
 
 ```typescript
 import { invoke } from "@tauri-apps/api/core";
@@ -78,7 +94,7 @@ Keep wrappers minimal — no error handling, no state, no retries. Those belong 
 Hooks follow a consistent pattern:
 
 ```typescript
-// src/hooks/useMyFeature.ts
+// frontend/src/hooks/useMyFeature.ts
 import { useState, useCallback } from "react";
 import { myCommand, MyType } from "@/lib/tauri";
 
@@ -117,7 +133,7 @@ Hooks return a spread of their state plus action functions. They handle all erro
 
 ## Adding a Page
 
-1. Create `src/pages/MyPage.tsx`:
+1. Create `frontend/src/pages/MyPage.tsx`:
 
 ```typescript
 import { Header } from "@/components/layout/Header";
@@ -134,13 +150,13 @@ export function MyPage() {
 }
 ```
 
-2. Add the route in `src/App.tsx` inside `<Routes>`:
+2. Add the route in `frontend/src/App.tsx` inside `<Routes>`:
 
 ```tsx
 <Route path="/my-page" element={<MyPage />} />
 ```
 
-3. Add a nav item in `src/components/layout/Sidebar.tsx`:
+3. Add a nav item in `frontend/src/components/layout/Sidebar.tsx`:
 
 ```typescript
 const navItems = [
@@ -189,16 +205,16 @@ import { Radio } from "lucide-react";
 
 ## shadcn/ui Components
 
-Available components (all in `src/components/ui/`):
+Available components (all in `frontend/src/components/ui/`):
 
 Badge, Button, Card, Input, ScrollArea, Separator, Sheet, Sidebar, Skeleton, Tooltip
 
-To add a new shadcn component, use the CLI:
+To add a new shadcn component, use the CLI from the `frontend/` directory:
 ```bash
-npx shadcn@latest add [component-name]
+cd frontend && npx shadcn@latest add [component-name]
 ```
 
-The config is in `components.json` — new-york style, neutral base, CSS variables enabled.
+The config is in `frontend/components.json` — new-york style, neutral base, CSS variables enabled.
 
 ### Button sizes for reference
 
@@ -268,6 +284,15 @@ Every page and data display must have purposeful empty and error states — no p
 ) : (
   // render device list
 )}
+```
+
+## Build Commands
+
+```bash
+npm run --prefix frontend dev    # Vite dev server on port 1420
+npm run --prefix frontend build  # TypeScript check + Vite production build
+cd frontend && cargo tauri dev   # Full Tauri dev mode (frontend + backend)
+cd frontend && cargo tauri build # Production Tauri build
 ```
 
 ## Reference

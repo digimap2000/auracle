@@ -1,6 +1,6 @@
 ---
 name: auracle-rust
-description: "Rust/Tauri backend development for Auracle. Use this skill whenever writing, modifying, or reviewing Rust code in the src-tauri/ directory. Covers Tauri command patterns, module structure, error handling, state management, and plugin registration. Trigger on any backend work: new commands, new modules, error variants, device trait implementations, BLE or serial code, or Cargo dependency changes."
+description: "Rust/Tauri backend development for Auracle. Use this skill whenever writing, modifying, or reviewing Rust code in the frontend/src-tauri/ directory. Covers Tauri command patterns, module structure, error handling, state management, and plugin registration. Trigger on any backend work: new commands, new modules, error variants, device trait implementations, BLE or serial code, or Cargo dependency changes."
 ---
 
 # Auracle Rust Backend
@@ -9,7 +9,7 @@ This skill encodes the patterns and constraints for all Rust backend work in Aur
 
 ## Project Location
 
-The Rust backend lives in `src-tauri/src/`. The crate is called `auracle_lib` and produces `staticlib`, `cdylib`, and `rlib` targets. Rust edition is 2021.
+The Rust backend lives in `frontend/src-tauri/src/`. The crate is called `auracle_lib` and produces `staticlib`, `cdylib`, and `rlib` targets. Rust edition is 2021.
 
 ## Architecture Rules
 
@@ -22,7 +22,7 @@ Frontend (TS) → invoke() → Tauri Command (thin) → Domain Module (logic) �
 Each domain area gets its own module directory:
 
 ```
-src-tauri/src/
+frontend/src-tauri/src/
 ├── main.rs           # Entry point only: calls auracle_lib::run()
 ├── lib.rs            # App setup, command registration, command handlers
 ├── error.rs          # AuracleError enum (thiserror)
@@ -61,7 +61,7 @@ async fn my_new_command(param: String) -> Result<ReturnType, AuracleError> {
 ])
 ```
 
-3. **Add the frontend wrapper** in `src/lib/tauri.ts` (see the auracle-frontend skill for TypeScript patterns). The frontend wrapper must exist before the command is considered complete.
+3. **Add the frontend wrapper** in `frontend/src/lib/tauri.ts` (see the auracle-frontend skill for TypeScript patterns). The frontend wrapper must exist before the command is considered complete.
 
 4. **If new types are needed**, define the Rust struct with derives and a matching TypeScript interface:
 
@@ -198,7 +198,7 @@ mod tests {
 }
 ```
 
-Integration tests that need the full Tauri app context go in `src-tauri/tests/`.
+Integration tests that need the full Tauri app context go in `frontend/src-tauri/tests/`.
 
 ## Reference
 

@@ -54,7 +54,7 @@ Use this when reviewing any implementation:
 
 ### Frontend (TypeScript/React)
 - [ ] TypeScript interfaces mirror Rust structs per `docs/data-models.md`
-- [ ] Invoke wrappers exist in `src/lib/tauri.ts` for every command
+- [ ] Invoke wrappers exist in `frontend/src/lib/tauri.ts` for every command
 - [ ] Hooks own state and data fetching, pages own composition
 - [ ] No `any` types
 - [ ] Design tokens from `docs/design-system.md` used (no raw hex values)
@@ -64,7 +64,7 @@ Use this when reviewing any implementation:
 
 ### Cross-cutting
 - [ ] IPC contract matches between frontend and backend per `docs/data-models.md`
-- [ ] New capabilities registered in `src-tauri/capabilities/default.json` if needed
+- [ ] New capabilities registered in `frontend/src-tauri/capabilities/default.json` if needed
 - [ ] Failures surface to the UI — never silent
 
 ## When the Spec Doesn't Cover Something
