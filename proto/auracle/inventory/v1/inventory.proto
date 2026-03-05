@@ -1,0 +1,129 @@
+syntax = "proto3";
+
+package auracle.inventory.v1;
+
+option cc_enable_arenas = true;
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum Transport {
+    TRANSPORT_UNSPECIFIED = 0;
+    TRANSPORT_SERIAL = 1;
+    TRANSPORT_MDNS = 2;
+}
+
+enum HardwareKind {
+    HARDWARE_KIND_UNSPECIFIED = 0;
+    HARDWARE_KIND_NRF5340_AUDIO_DK = 1;
+}
+
+// ---------------------------------------------------------------------------
+// Detail messages
+// ---------------------------------------------------------------------------
+
+message SerialDetails {
+    string port = 1;
+    string usb_vid = 2;
+    string usb_pid = 3;
+    string manufacturer = 4;
+    string product = 5;
+    string usb_serial = 6;
+}
+
+message MdnsDetails {
+    string service = 1;
+    string instance = 2;
+    string host = 3;
+    uint32 port = 4;
+}
+
+// ---------------------------------------------------------------------------
+// Identity and lease
+// ---------------------------------------------------------------------------
+
+message Identity {
+    string vendor = 1;
+    string product = 2;
+    string serial = 3;
+    string firmware_version = 4;
+}
+
+message Lease {
+    string token = 1;
+    string unit_id = 2;
+    string client_id = 3;
+    string purpose = 4;
+    int64 claimed_at_ms = 5;
+}
+
+// ---------------------------------------------------------------------------
+// Domain objects
+// ---------------------------------------------------------------------------
+
+message HardwareCandidate {
+    string id = 1;
+    Transport transport = 2;
+    bool present = 3;
+    int64 first_seen_ms = 4;
+    int64 last_seen_ms = 5;
+    oneof details {
+        SerialDetails serial = 6;
+        MdnsDetails mdns = 7;
+    }
+}
+
+message HardwareUnit {
+    string id = 1;
+    HardwareKind kind = 2;
+    bool present = 3;
+    string bound_candidate = 4;
+    Identity identity = 5;
+    optional Lease lease = 6;
+}
+
+// ---------------------------------------------------------------------------
+// Events
+// ---------------------------------------------------------------------------
+
+message CandidateAdded { HardwareCandidate candidate = 1; }
+message CandidateUpdated { HardwareCandidate candidate = 1; }
+message CandidateGone { string id = 1; }
+message UnitAdded { HardwareUnit unit = 1; }
+message UnitUpdated { HardwareUnit unit = 1; }
+message UnitOnline { string id = 1; }
+message UnitOffline { string id = 1; }
+
+message ClaimChanged {
+    string id = 1;
+    optional Lease lease = 2;
+}
+
+message InventoryEvent {
+    int64 timestamp_ms = 1;
+    oneof payload {
+        CandidateAdded candidate_added = 2;
+        CandidateUpdated candidate_updated = 3;
+        CandidateGone candidate_gone = 4;
+        UnitAdded unit_added = 5;
+        UnitUpdated unit_updated = 6;
+        UnitOnline unit_online = 7;
+        UnitOffline unit_offline = 8;
+        ClaimChanged claim_changed = 9;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Service
+// ---------------------------------------------------------------------------
+
+message WatchRequest {
+    bool include_initial_snapshot = 1;
+    bool include_candidates = 2;
+    bool include_units = 3;
+}
+
+service InventoryService {
+    rpc Watch(WatchRequest) returns (stream InventoryEvent);
+}
