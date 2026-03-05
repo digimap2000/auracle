@@ -18,6 +18,16 @@ async fn extract_device(
     peripheral: &btleplug::platform::Peripheral,
 ) -> Option<BleDevice> {
     let props = peripheral.properties().await.ok()??;
+
+    // Diagnostic: see exactly what btleplug returns
+    eprintln!(
+        "[ble] {} local_name={:?} rssi={:?} services={}",
+        &id[..8.min(id.len())],
+        &props.local_name,
+        props.rssi,
+        props.services.len(),
+    );
+
     let name = props.local_name.unwrap_or_else(|| "Unknown".to_string());
     let rssi = props.rssi.unwrap_or(-100);
     let tx_power = props.tx_power_level;
