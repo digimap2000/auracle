@@ -3,7 +3,7 @@ import { ActivityRail } from "@/components/layout/ActivityRail";
 import { StatusBar } from "@/components/layout/StatusBar";
 import { Home } from "@/pages/Home";
 import { Devices } from "@/pages/Devices";
-import { StreamConfig } from "@/pages/StreamConfig";
+import { Generators } from "@/pages/Generators";
 import { Compliance } from "@/pages/Compliance";
 import { useBluetoothAdapter } from "@/hooks/useBluetoothAdapter";
 import { useDevices } from "@/hooks/useDevices";
@@ -32,7 +32,7 @@ export default function App() {
               }
             />
             <Route path="/browse" element={<Devices />} />
-            <Route path="/generate" element={<StreamConfig />} />
+            <Route path="/generate" element={<Generators />} />
             <Route path="/compliance" element={<Compliance />} />
           </Routes>
         </main>
