@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo } from "react";
+import { ICON_SIZE } from "@/lib/icons";
 import {
   Info,
   TriangleAlert,
@@ -184,7 +185,7 @@ export function IdentityTab({ peerId: _peerId }: IdentityTabProps) {
       <ResizablePanel defaultSize={75} minSize={40}>
         <div className="flex h-full">
           {/* Form — 2/3 */}
-          <div className="flex w-2/3 min-w-0 flex-col border-r">
+          <div className="flex w-2/3 min-w-0 flex-col">
             <ScrollArea className="h-full">
               <div className="px-4 py-3">
                 {/* Order matches preview: name, appearance, manufacturer, mfr data, description */}
@@ -271,7 +272,7 @@ export function IdentityTab({ peerId: _peerId }: IdentityTabProps) {
                   label="Description"
                   htmlFor="description"
                   empty={!identity.description}
-                  className="items-start [&>label]:pt-2"
+                  multiline
                   onMouseEnter={() => setHoveredField("description")}
                 >
                   <Textarea
@@ -287,11 +288,11 @@ export function IdentityTab({ peerId: _peerId }: IdentityTabProps) {
           </div>
 
           {/* Preview — 1/3 */}
-          <div className="w-1/3 min-w-0 overflow-y-auto">
+          <div className="w-1/3 min-w-0 overflow-y-auto bg-muted">
             <div className="flex flex-col items-center px-4 py-8">
               {/* Appearance icon */}
               <div className="flex size-20 shrink-0 items-center justify-center rounded-2xl bg-secondary">
-                <AppearanceIcon size={40} className="text-muted-foreground" />
+                <AppearanceIcon size={ICON_SIZE.hero} className="text-muted-foreground" />
               </div>
 
               {/* Peer name */}
@@ -308,7 +309,7 @@ export function IdentityTab({ peerId: _peerId }: IdentityTabProps) {
 
               {/* Manufacturer badge */}
               {manufacturerName && (
-                <Badge variant="outline" className="mt-3 text-[11px]">
+                <Badge variant="outline" className="mt-3 text-xs">
                   {manufacturerName}
                 </Badge>
               )}
@@ -318,7 +319,7 @@ export function IdentityTab({ peerId: _peerId }: IdentityTabProps) {
                 <>
                   <Separator className="my-4 w-full" />
                   <div className="w-full min-w-0">
-                    <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                    <p className="mb-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
                       Manufacturer Data
                     </p>
                     <HexDump data={identity.manufacturerData} bytesPerLine={8} />
@@ -336,44 +337,52 @@ export function IdentityTab({ peerId: _peerId }: IdentityTabProps) {
       {/* Info panel with tabs */}
       <ResizablePanel defaultSize={25} minSize={10}>
         <Tabs defaultValue="help" className="flex h-full flex-col gap-0">
-          <TabsList className="shrink-0 px-1">
-            <TabsTrigger value="help" className="gap-1 text-[11px]">
-              <Info size={12} />
-              Help
-            </TabsTrigger>
-            <TabsTrigger
-              value="warnings"
-              className={cn(
-                "gap-1 text-[11px]",
-                warnings.length > 0 && "!text-yellow-500"
-              )}
-            >
-              {warnings.length > 0 ? (
-                <Badge className="size-4 justify-center rounded-full bg-yellow-500 p-0 text-[10px] text-black">
-                  {warnings.length}
-                </Badge>
-              ) : (
-                <TriangleAlert size={12} />
-              )}
-              Warnings
-            </TabsTrigger>
-            <TabsTrigger
-              value="errors"
-              className={cn(
-                "gap-1 text-[11px]",
-                errors.length > 0 && "!text-destructive"
-              )}
-            >
-              {errors.length > 0 ? (
-                <Badge className="size-4 justify-center rounded-full bg-destructive p-0 text-[10px] text-white">
-                  {errors.length}
-                </Badge>
-              ) : (
-                <CircleX size={12} />
-              )}
-              Errors
-            </TabsTrigger>
-          </TabsList>
+          <div className="flex shrink-0 items-center border-b bg-muted px-2">
+            <TabsList variant="line" className="h-9">
+              <TabsTrigger value="help" className="gap-1 text-xs">
+                <Info size={ICON_SIZE.xs} />
+                Help
+              </TabsTrigger>
+              <TabsTrigger
+                value="warnings"
+                className={cn(
+                  "gap-1 text-xs",
+                  warnings.length > 0 && "!text-warning"
+                )}
+              >
+                {warnings.length > 0 ? (
+                  <Badge
+                    className="justify-center rounded-full border-warning bg-transparent p-0 text-xs leading-none text-inherit"
+                    style={{ width: ICON_SIZE.md, height: ICON_SIZE.md }}
+                  >
+                    {warnings.length}
+                  </Badge>
+                ) : (
+                  <TriangleAlert size={ICON_SIZE.md} />
+                )}
+                Warnings
+              </TabsTrigger>
+              <TabsTrigger
+                value="errors"
+                className={cn(
+                  "gap-1 text-xs",
+                  errors.length > 0 && "!text-destructive"
+                )}
+              >
+                {errors.length > 0 ? (
+                  <Badge
+                    className="justify-center rounded-full border-destructive bg-transparent p-0 text-xs leading-none text-inherit"
+                    style={{ width: ICON_SIZE.md, height: ICON_SIZE.md }}
+                  >
+                    {errors.length}
+                  </Badge>
+                ) : (
+                  <CircleX size={ICON_SIZE.md} />
+                )}
+                Errors
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
           <TabsContent value="help" className="min-h-0 flex-1 overflow-hidden">
             <ScrollArea className="h-full">
@@ -382,22 +391,22 @@ export function IdentityTab({ peerId: _peerId }: IdentityTabProps) {
                   <div className="space-y-2">
                     <div>
                       <p className="text-xs font-medium">{help.title}</p>
-                      <p className="text-[11px] text-muted-foreground/60">
+                      <p className="text-xs text-muted-foreground/60">
                         {help.hint}
                       </p>
                     </div>
-                    <p className="text-[11px] leading-relaxed text-muted-foreground">
+                    <p className="text-xs leading-relaxed text-muted-foreground">
                       {help.detail}
                     </p>
                     {help.example && (
-                      <p className="text-[11px] leading-relaxed text-muted-foreground/70">
+                      <p className="text-xs leading-relaxed text-muted-foreground/70">
                         <span className="font-medium text-muted-foreground">e.g. </span>
                         {help.example}
                       </p>
                     )}
                   </div>
                 ) : (
-                  <p className="text-[11px] text-muted-foreground/50">
+                  <p className="text-xs text-muted-foreground/50">
                     Hover over a field to see details
                   </p>
                 )}
@@ -409,15 +418,15 @@ export function IdentityTab({ peerId: _peerId }: IdentityTabProps) {
             <ScrollArea className="h-full">
               <div className="px-4 py-3">
                 {warnings.length === 0 ? (
-                  <p className="text-[11px] text-muted-foreground/50">
+                  <p className="text-xs text-muted-foreground/50">
                     No warnings
                   </p>
                 ) : (
                   <ul className="space-y-2">
                     {warnings.map((d, i) => (
                       <li key={i} className="flex items-start gap-2">
-                        <TriangleAlert size={14} className="mt-px shrink-0 text-yellow-500" />
-                        <span className="text-[11px] leading-relaxed text-muted-foreground">
+                        <TriangleAlert size={ICON_SIZE.sm} className="mt-px shrink-0 text-warning" />
+                        <span className="text-xs leading-relaxed text-muted-foreground">
                           {d.message}
                         </span>
                       </li>
@@ -432,15 +441,15 @@ export function IdentityTab({ peerId: _peerId }: IdentityTabProps) {
             <ScrollArea className="h-full">
               <div className="px-4 py-3">
                 {errors.length === 0 ? (
-                  <p className="text-[11px] text-muted-foreground/50">
+                  <p className="text-xs text-muted-foreground/50">
                     No errors
                   </p>
                 ) : (
                   <ul className="space-y-2">
                     {errors.map((d, i) => (
                       <li key={i} className="flex items-start gap-2">
-                        <CircleX size={14} className="mt-px shrink-0 text-destructive" />
-                        <span className="text-[11px] leading-relaxed text-muted-foreground">
+                        <CircleX size={ICON_SIZE.sm} className="mt-px shrink-0 text-destructive" />
+                        <span className="text-xs leading-relaxed text-muted-foreground">
                           {d.message}
                         </span>
                       </li>

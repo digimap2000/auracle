@@ -9,7 +9,7 @@ export function Header({ title, description }: HeaderProps) {
       <div className="flex flex-col gap-0">
         <h1 className="text-sm font-medium text-foreground">{title}</h1>
         {description && (
-          <p className="text-[11px] text-muted-foreground">{description}</p>
+          <p className="text-xs text-muted-foreground">{description}</p>
         )}
       </div>
     </div>

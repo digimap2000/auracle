@@ -22,7 +22,7 @@ export function ActivityRail() {
   const { theme, toggle } = useTheme();
 
   return (
-    <nav className="flex h-full w-[72px] flex-col border-r bg-background">
+    <nav className="flex h-full w-20 flex-col bg-background">
       <div className="flex flex-1 flex-col items-center gap-1 p-2">
         {activities.map(({ to, icon: Icon, label, end }) => (
           <NavLink
@@ -39,7 +39,7 @@ export function ActivityRail() {
             }
           >
             <Icon size={16} />
-            <span className="text-[10px] font-medium">{label}</span>
+            <span className="text-xs font-medium">{label}</span>
           </NavLink>
         ))}
       </div>
@@ -50,7 +50,7 @@ export function ActivityRail() {
           title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
         >
           {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
-          <span className="text-[10px] font-medium">Theme</span>
+          <span className="text-xs font-medium">Theme</span>
         </button>
       </div>
     </nav>

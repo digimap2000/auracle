@@ -30,10 +30,10 @@ export function formatHexBytes(bytes: number[]): string {
 
 /** Consistent RSSI thresholds used by both SignalBars and numeric display */
 export function rssiLevel(rssi: number): { bars: number; color: string; bgColor: string } {
-  if (rssi > -50) return { bars: 4, color: "text-green-500", bgColor: "bg-green-500" };
-  if (rssi > -60) return { bars: 3, color: "text-green-500", bgColor: "bg-green-500" };
-  if (rssi > -70) return { bars: 2, color: "text-yellow-500", bgColor: "bg-yellow-500" };
-  return { bars: 1, color: "text-red-500", bgColor: "bg-red-500" };
+  if (rssi > -50) return { bars: 4, color: "text-success", bgColor: "bg-success" };
+  if (rssi > -60) return { bars: 3, color: "text-success", bgColor: "bg-success" };
+  if (rssi > -70) return { bars: 2, color: "text-warning", bgColor: "bg-warning" };
+  return { bars: 1, color: "text-destructive", bgColor: "bg-destructive" };
 }
 
 export function rssiColor(rssi: number): string {

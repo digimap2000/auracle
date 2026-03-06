@@ -29,7 +29,7 @@ export function StatusBar({ connectedCount, updater, bluetoothAdapter }: StatusB
       : bluetoothAdapter.adapter?.name ?? "No adapter";
 
   return (
-    <div className="flex h-8 shrink-0 items-center justify-between border-t bg-background px-3 text-[11px] text-muted-foreground">
+    <div className="flex h-8 shrink-0 items-center justify-between border-t bg-background px-3 text-xs text-muted-foreground">
       <div className="flex items-center gap-3">
         <Tooltip>
           <TooltipTrigger asChild>
@@ -51,7 +51,7 @@ export function StatusBar({ connectedCount, updater, bluetoothAdapter }: StatusB
             className={cn(
               "h-1.5 w-1.5 rounded-full",
               isConnected
-                ? "animate-pulse bg-green-500"
+                ? "animate-pulse bg-success"
                 : "bg-muted-foreground/30"
             )}
           />
@@ -94,7 +94,7 @@ export function StatusBar({ connectedCount, updater, bluetoothAdapter }: StatusB
             Update failed — retry
           </button>
         )}
-        <span className="font-mono text-[10px]">v0.1.0</span>
+        <span className="font-mono text-xs">v0.1.0</span>
       </div>
     </div>
   );

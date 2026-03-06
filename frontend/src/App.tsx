@@ -19,11 +19,11 @@ export default function App() {
   const { zoom } = useZoom();
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden">
+    <div className="flex h-screen w-screen flex-col overflow-hidden bg-background">
       <ZoomIndicator zoom={zoom} />
-      <ActivityRail />
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <main className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex min-h-0 flex-1">
+        <ActivityRail />
+        <main className="flex flex-1 flex-col overflow-hidden rounded-tl-xl bg-background">
           <Routes>
             <Route
               path="/"
@@ -42,12 +42,12 @@ export default function App() {
             <Route path="/theme" element={<ThemeReference />} />
           </Routes>
         </main>
-        <StatusBar
-          connectedCount={connectedDevices.length}
-          updater={updater}
-          bluetoothAdapter={bluetoothAdapter}
-        />
       </div>
+      <StatusBar
+        connectedCount={connectedDevices.length}
+        updater={updater}
+        bluetoothAdapter={bluetoothAdapter}
+      />
     </div>
   );
 }

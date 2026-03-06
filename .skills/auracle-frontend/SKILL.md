@@ -34,13 +34,16 @@ frontend/
 ├── src/
 │   ├── components/
 │   │   ├── devices/         # BLE device display: DeviceCard, SignalBars
-│   │   ├── layout/          # App shell: Sidebar, Header, StatusBar
+│   │   ├── forms/           # Shared form primitives: FormField, DataInput, HexDump
+│   │   ├── generators/      # Broadcast generator UI: IdentityTab, types
+│   │   ├── layout/          # App shell: Sidebar, Header, StatusBar, ActivityRail
 │   │   └── ui/              # shadcn/ui primitives (don't modify without reason)
 │   ├── data/
 │   │   └── ble-company-ids.json  # Bluetooth SIG company ID lookup (3,972 entries)
 │   ├── hooks/               # One file per feature area
 │   ├── lib/
 │   │   ├── ble-utils.ts     # BLE name resolution (company IDs, service UUIDs)
+│   │   ├── icons.ts         # ICON_SIZE constants — standard icon sizes for the app
 │   │   ├── tauri.ts         # Typed invoke wrappers + shared interfaces
 │   │   └── utils.ts         # cn() helper
 │   ├── pages/               # One file per route
@@ -165,21 +168,36 @@ const navItems = [
 ];
 ```
 
-## Design System
+## Design System — No Local Overrides
 
-The app is dark-mode only. All colours are CSS custom properties consumed through Tailwind. Never use raw hex values in components — always use the token names.
+The theme is the single source of truth. Every colour, text size, spacing value, and icon size must come from the design system — either a CSS custom property consumed via Tailwind, a standard Tailwind utility class, or a shared constant. **Local style hacks are forbidden.** Specifically:
 
-Key tokens (see `docs/design-system.md` for the full set):
+- **No hardcoded colours.** Never use raw hex values (`#e5484d`), Tailwind palette colours (`red-500`, `yellow-400`, `green-500`), or `text-black`/`text-white` in components. Use semantic tokens: `text-destructive`, `bg-warning`, `text-success`, `text-foreground`, etc. If a semantic token doesn't exist for your use case, add one to the theme in `index.css` — don't work around it.
+- **No arbitrary pixel sizes.** Never use Tailwind's bracket syntax for text (`text-[11px]`, `text-[13px]`) or spacing/sizing (`w-[72px]`, `w-[35%]`). Use the standard Tailwind scale: `text-xs`, `text-sm`, `w-20`, `w-1/3`, etc. If the standard sizes look wrong at the current zoom level, the fix is adjusting the global zoom — not poking pixel values into individual controls.
+- **No magic numbers for icon sizes.** Never pass raw numbers to icon `size` props. Import and use the `ICON_SIZE` constants from `@/lib/icons`.
+- **No child selector hacks.** Don't use arbitrary Tailwind child selectors like `[&>label]:pt-2` to patch alignment. If a component needs a layout variant, add a proper prop (e.g. `multiline`) that handles it internally.
+- **No `!important` overrides** unless structurally required by a third-party component (e.g. sidebar collapse animation). Document why with a comment.
+
+If you find yourself reaching for a local override, stop and ask: should this be a theme token, a component prop, or a shared constant?
+
+### Colour Tokens
+
+All colours are CSS custom properties defined in `frontend/src/index.css` and registered in the `@theme inline` block so Tailwind generates utility classes. Key tokens:
 
 | Tailwind class | Purpose |
 |---------------|---------|
-| `bg-background` | Page background (#0a0a0a) |
-| `bg-card` / `bg-surface` | Card/panel background (#111111) |
-| `text-foreground` | Primary text (#ededed) |
-| `text-muted-foreground` | Secondary text (#a1a1a1) |
-| `border-border` | Default borders (#1f1f1f) |
-| `bg-primary` | Accent/active (#0070f3) |
-| `bg-destructive` | Errors (#e5484d) |
+| `bg-background` | Page background |
+| `bg-card` / `bg-surface` | Card/panel background |
+| `bg-sidebar` | Sidebar background |
+| `text-foreground` | Primary text |
+| `text-muted-foreground` | Secondary/dimmed text |
+| `border-border` | Default borders |
+| `bg-primary` / `text-primary` | Accent/active |
+| `bg-destructive` / `text-destructive` | Errors, critical states |
+| `bg-warning` / `text-warning` | Warnings, caution states |
+| `bg-success` / `text-success` | Healthy, connected, good RSSI |
+
+Each semantic colour has a corresponding `-foreground` variant for text on that background (e.g. `text-destructive-foreground` on `bg-destructive`). See `index.css` for the full set.
 
 ### Typography
 
@@ -187,27 +205,52 @@ Two font families, used intentionally:
 - **Geist Sans** (`font-sans`): All UI text — labels, titles, descriptions, buttons
 - **Geist Mono** (`font-mono`): Technical data — log entries, device IDs, MAC addresses, versions, the "Auracle" brand
 
-Text sizes are deliberately small for a dense, professional feel:
-- Page titles: `text-sm font-medium`
-- Descriptions: `text-[11px] text-muted-foreground`
-- Status bar: `text-[11px]`, version `text-[10px] font-mono`
-- Log entries: `text-[11px] font-mono`
-- Badges: `text-[10px] font-medium`
+Text sizes use the **standard Tailwind type scale only** — no arbitrary pixel values:
+
+| Class | Px | Use |
+|-------|-----|-----|
+| `text-xs` | 12 | Secondary UI: status bar, badges, log entries, table cells, muted labels |
+| `text-sm` | 14 | Primary UI: form labels, nav items, descriptions, page titles |
+| `text-base` | 16 | Emphasis: hero headings (rare) |
+
+The app targets a dense, professional feel. If text appears too large or too small, adjust the global zoom level — never poke pixel values into individual components.
 
 ### Icons
 
-Lucide React exclusively. Use 14px or 16px consistently — never mix sizes in the same visual context.
+Lucide React exclusively. Always use the shared `ICON_SIZE` constants — never pass raw numbers:
 
 ```tsx
 import { Radio } from "lucide-react";
-<Radio className="h-4 w-4" />
+import { ICON_SIZE } from "@/lib/icons";
+
+<Radio size={ICON_SIZE.md} />
 ```
+
+| Constant | Px | Use |
+|----------|-----|-----|
+| `ICON_SIZE.xs` | 12 | Status bar indicators, inline tab icons |
+| `ICON_SIZE.sm` | 14 | Secondary UI — badges, form labels, tab triggers |
+| `ICON_SIZE.md` | 16 | Primary UI — navigation, buttons, toolbar |
+| `ICON_SIZE.lg` | 20 | Emphasis — section headers, larger buttons |
+| `ICON_SIZE.xl` | 24 | Standalone — dialog icons, empty states |
+| `ICON_SIZE.hero` | 40 | Large decorative icons, preview panels |
+
+### Layout Sizing
+
+Use standard Tailwind spacing and fraction utilities for layout:
+- Widths: `w-20`, `w-1/3`, `w-2/3`, `flex-1` — never `w-[72px]` or `w-[35%]`
+- Gaps/padding: `gap-2`, `px-4`, `py-3` — use the 4px scale
+- Flex ratios for proportional columns, not hardcoded percentages
+
+### Panel Dividers
+
+**Borders and separators imply the user can resize.** Only use a visible divider (border, separator, or `ResizableHandle`) between panels that are genuinely resizable. For fixed (non-resizable) panel splits, distinguish the subordinate panel with an alternative background instead — typically `bg-card` against the default `bg-background`. This is the same pattern used by the sidebar (`bg-sidebar`) and the preview pane (`bg-card`).
 
 ## shadcn/ui Components
 
 Available components (all in `frontend/src/components/ui/`):
 
-Badge, Button, Card, Input, ScrollArea, Separator, Sheet, Sidebar, Skeleton, Tooltip
+Badge, Button, Card, Collapsible, Input, Label, Resizable, ScrollArea, Select, Separator, Sheet, Sidebar, Skeleton, Tabs, Textarea, Toggle, ToggleGroup, Tooltip
 
 To add a new shadcn component, use the CLI from the `frontend/` directory:
 ```bash

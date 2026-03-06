@@ -91,7 +91,7 @@ export function DeviceCard({ device, expanded, onToggle }: DeviceCardProps) {
                 <Badge
                   key={name}
                   variant={config?.variant ?? "outline"}
-                  className="text-[10px]"
+                  className="text-xs"
                 >
                   {count > 1 && <span className="mr-0.5 opacity-60">{count}x</span>}
                   {config?.label ?? name}
@@ -99,7 +99,7 @@ export function DeviceCard({ device, expanded, onToggle }: DeviceCardProps) {
               );
             })}
             {overflowCount > 0 && (
-              <Badge variant="secondary" className="text-[10px]">
+              <Badge variant="secondary" className="text-xs">
                 +{overflowCount} more
               </Badge>
             )}
@@ -118,18 +118,18 @@ export function DeviceCard({ device, expanded, onToggle }: DeviceCardProps) {
       {expanded ? (
         <div className="mt-1 flex items-center justify-between">
           {companyName && companyHex ? (
-            <span className="text-[11px] text-muted-foreground">
+            <span className="text-xs text-muted-foreground">
               {companyName} - {companyHex}
             </span>
           ) : (
             <span />
           )}
-          <span className="font-mono text-[10px] text-muted-foreground">
+          <span className="font-mono text-xs text-muted-foreground">
             {device.id}
           </span>
         </div>
       ) : companyName ? (
-        <p className="mt-1 text-[11px] text-muted-foreground">{companyName}</p>
+        <p className="mt-1 text-xs text-muted-foreground">{companyName}</p>
       ) : null}
 
       {/* Expandable detail section */}
@@ -142,41 +142,43 @@ export function DeviceCard({ device, expanded, onToggle }: DeviceCardProps) {
         <div className="overflow-hidden">
           <Separator className="my-3" />
 
-          {/* Services table — no section heading */}
+          {/* Services list */}
           {device.services.length > 0 ? (
-            <table className="w-full table-fixed text-left">
-              <thead>
-                <tr className="border-b text-[10px] text-muted-foreground">
-                  <th className="w-[35%] pb-1.5 font-medium">Service</th>
-                  <th className="pb-1.5 font-medium">UUID</th>
-                  <th className="w-[72px] pb-1.5 text-right font-medium">Type</th>
-                </tr>
-              </thead>
-              <tbody className="text-xs">
-                {device.services.map((uuid, i) => {
-                  const name = resolveServiceName(uuid);
-                  const isKnown = name !== uuid;
-                  const standard = isStandardUuid(uuid);
-                  return (
-                    <tr key={i} className="border-b border-border/50 last:border-0">
-                      <td className="py-1.5">
-                        {isKnown ? name : (
-                          <span className="text-muted-foreground">Unknown Service</span>
-                        )}
-                      </td>
-                      <td className="truncate py-1.5 font-mono text-[10px] text-muted-foreground">
-                        {uuid}
-                      </td>
-                      <td className="py-1.5 text-right text-[10px] text-muted-foreground">
-                        {standard ? "Standard" : "Custom"}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <div className="text-xs">
+              <div className="flex border-b pb-1.5 text-muted-foreground">
+                <span className="w-1/3 shrink-0 font-medium">Service</span>
+                <span className="min-w-0 flex-1 font-medium">UUID</span>
+                <span className="shrink-0 text-right font-medium">Type</span>
+              </div>
+              {device.services.map((uuid, i) => {
+                const name = resolveServiceName(uuid);
+                const isKnown = name !== uuid;
+                const standard = isStandardUuid(uuid);
+                return (
+                  <div
+                    key={i}
+                    className={cn(
+                      "flex py-1.5",
+                      i < device.services.length - 1 && "border-b border-border/50"
+                    )}
+                  >
+                    <span className="w-1/3 shrink-0 truncate">
+                      {isKnown ? name : (
+                        <span className="text-muted-foreground">Unknown Service</span>
+                      )}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate font-mono text-muted-foreground">
+                      {uuid}
+                    </span>
+                    <span className="shrink-0 text-right text-muted-foreground">
+                      {standard ? "Standard" : "Custom"}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
           ) : (
-            <p className="text-[11px] text-muted-foreground">No services advertised</p>
+            <p className="text-xs text-muted-foreground">No services advertised</p>
           )}
         </div>
       </div>

@@ -121,7 +121,7 @@ export function Generators() {
 
   return (
     <SidebarProvider
-      className="h-full !min-h-0 bg-sidebar"
+      className="h-full !min-h-0"
       open={sidebarOpen}
       onOpenChange={setSidebarOpen}
     >
@@ -135,7 +135,7 @@ export function Generators() {
         <SidebarHeader>
           <div className="flex flex-col gap-0 px-0.5">
             <span className="text-sm font-medium">Generators</span>
-            <span className="text-[11px] text-sidebar-foreground/50">
+            <span className="text-xs text-sidebar-foreground/50">
               Broadcast stream generators
             </span>
           </div>
@@ -210,13 +210,8 @@ export function Generators() {
         </SidebarContent>
       </Sidebar>
 
-      {/* Main content — rounded inset card */}
-      <div
-        className={cn(
-          "flex flex-1 flex-col overflow-hidden rounded-xl bg-background shadow-sm transition-[margin] duration-200 ease-linear",
-          sidebarOpen ? "my-2 mr-2" : "m-2",
-        )}
-      >
+      {/* Main content */}
+      <div className="flex flex-1 flex-col overflow-hidden">
         <Tabs defaultValue="identity" className="flex flex-1 flex-col">
           <div className="flex shrink-0 items-center gap-1 px-2 pt-1">
             <SidebarTrigger className="size-7" />
@@ -251,7 +246,7 @@ export function Generators() {
             <div className="p-4 text-center text-muted-foreground">
               <Megaphone className="mx-auto mb-3 size-8 opacity-30" />
               <p className="text-sm">Advertising parameters</p>
-              <p className="mt-1 text-[11px]">
+              <p className="mt-1 text-xs">
                 Broadcast name, interval, and advertising data configuration
               </p>
             </div>
@@ -260,7 +255,7 @@ export function Generators() {
             <div className="p-4 text-center text-muted-foreground">
               <Layers className="mx-auto mb-3 size-8 opacity-30" />
               <p className="text-sm">GATT services</p>
-              <p className="mt-1 text-[11px]">
+              <p className="mt-1 text-xs">
                 Service definitions and characteristic configuration
               </p>
             </div>
@@ -269,7 +264,7 @@ export function Generators() {
             <div className="p-4 text-center text-muted-foreground">
               <AudioLines className="mx-auto mb-3 size-8 opacity-30" />
               <p className="text-sm">Audio streams</p>
-              <p className="mt-1 text-[11px]">
+              <p className="mt-1 text-xs">
                 Codec, sample rate, bitrate, and BIS configuration
               </p>
             </div>

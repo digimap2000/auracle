@@ -64,7 +64,7 @@ export function HexDump({ data, bytesPerLine = 16 }: HexDumpProps) {
   return (
     <div className="min-w-0 space-y-1">
       <div className="min-w-0 overflow-x-auto rounded-md bg-secondary/50 px-3 py-2">
-        <pre className="min-w-0 font-mono text-[11px] leading-relaxed">
+        <pre className="min-w-0 font-mono text-xs leading-relaxed">
           {lines.map((line) => (
             <div key={line.offset} className="flex">
               <span className="text-muted-foreground/50">{line.offset}</span>
@@ -74,7 +74,7 @@ export function HexDump({ data, bytesPerLine = 16 }: HexDumpProps) {
           ))}
         </pre>
       </div>
-      <p className="text-right text-[10px] text-muted-foreground/50">
+      <p className="text-right text-xs text-muted-foreground/50">
         {byteCount} {byteCount === 1 ? "byte" : "bytes"}
       </p>
     </div>

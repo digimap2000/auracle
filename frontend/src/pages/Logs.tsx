@@ -62,7 +62,7 @@ export function Logs() {
           {mockLogs.map((log, i) => (
             <div
               key={i}
-              className="flex items-start gap-2 rounded-sm px-2 py-1 font-mono text-[11px] leading-5 hover:bg-secondary/30"
+              className="flex items-start gap-2 rounded-sm px-2 py-1 font-mono text-xs leading-5 hover:bg-secondary/30"
             >
               <span className="shrink-0 text-muted-foreground">
                 {formatTimestamp(log.timestamp)}

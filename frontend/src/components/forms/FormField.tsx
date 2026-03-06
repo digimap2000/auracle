@@ -8,6 +8,8 @@ interface FormFieldProps {
   htmlFor?: string;
   /** Whether the field value is empty/default — dims the row */
   empty?: boolean;
+  /** Align label to top for multiline controls (textarea) */
+  multiline?: boolean;
   /** Optional className for the outer wrapper */
   className?: string;
   /** Called when the mouse enters the field row */
@@ -20,18 +22,26 @@ export function FormField({
   label,
   htmlFor,
   empty,
+  multiline,
   className,
   onMouseEnter,
   children,
 }: FormFieldProps) {
   return (
     <div
-      className={cn("grid grid-cols-[1fr_2fr] items-center gap-x-4 py-2.5", className)}
+      className={cn(
+        "grid grid-cols-[1fr_2fr] gap-x-4 py-2.5",
+        multiline ? "items-start" : "items-center",
+        className,
+      )}
       onMouseEnter={onMouseEnter}
     >
       <label
         htmlFor={htmlFor}
-        className="text-right text-[13px] font-medium text-foreground"
+        className={cn(
+          "text-right text-sm font-medium text-foreground",
+          multiline && "pt-2",
+        )}
       >
         {label}
       </label>

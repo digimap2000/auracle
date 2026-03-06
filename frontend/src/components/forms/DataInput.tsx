@@ -124,7 +124,7 @@ export function DataInput({
               <Binary />
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="bottom" className="text-[11px]">
+          <TooltipContent side="bottom" className="text-xs">
             Hex
           </TooltipContent>
         </Tooltip>
@@ -140,7 +140,7 @@ export function DataInput({
               <Type />
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="bottom" className="text-[11px]">
+          <TooltipContent side="bottom" className="text-xs">
             Text
           </TooltipContent>
         </Tooltip>

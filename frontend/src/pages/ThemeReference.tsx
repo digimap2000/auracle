@@ -39,7 +39,7 @@ function Swatch({ name, variable, className, foregroundClass }: SwatchProps) {
         <p className={`text-xs font-medium ${foregroundClass ?? "text-foreground"}`}>
           {name}
         </p>
-        <p className="font-mono text-[10px] text-muted-foreground">{variable}</p>
+        <p className="font-mono text-xs text-muted-foreground">{variable}</p>
       </div>
     </div>
   );
@@ -54,14 +54,14 @@ function SpacingScale() {
     <div className="flex flex-col gap-1.5">
       {SPACING.map((s) => (
         <div key={s} className="flex items-center gap-3">
-          <span className="w-8 text-right font-mono text-[10px] text-muted-foreground">
+          <span className="w-8 text-right font-mono text-xs text-muted-foreground">
             {s}
           </span>
           <div
             className="h-3 rounded-sm bg-primary"
             style={{ width: `${s * 4}px` }}
           />
-          <span className="font-mono text-[10px] text-muted-foreground">
+          <span className="font-mono text-xs text-muted-foreground">
             {s * 4}px
           </span>
         </div>
@@ -89,7 +89,7 @@ function RadiusScale() {
           <div
             className={`size-12 border-2 border-primary bg-secondary ${cls}`}
           />
-          <span className="font-mono text-[10px] text-muted-foreground">
+          <span className="font-mono text-xs text-muted-foreground">
             {label}
           </span>
         </div>
@@ -110,9 +110,7 @@ function TypographySamples() {
           ["text-lg font-medium", "lg medium — Sub-heading"],
           ["text-base", "base — Body text (16px)"],
           ["text-sm", "sm — Secondary text (14px)"],
-          ["text-xs", "xs — Captions (12px)"],
-          ["text-[11px]", "11px — Small labels"],
-          ["text-[10px]", "10px — Micro labels"],
+          ["text-xs", "xs — Captions & labels (12px)"],
         ] as const
       ).map(([cls, label]) => (
         <div key={cls}>
@@ -124,9 +122,7 @@ function TypographySamples() {
       {(
         [
           ["text-sm font-mono", "sm mono — Code / data"],
-          ["text-xs font-mono", "xs mono — IDs, hex"],
-          ["text-[11px] font-mono", "11px mono — Hex dump"],
-          ["text-[10px] font-mono", "10px mono — Byte counts"],
+          ["text-xs font-mono", "xs mono — IDs, hex, byte counts"],
         ] as const
       ).map(([cls, label]) => (
         <div key={cls}>
@@ -194,6 +190,8 @@ export function ThemeReference() {
                   <Swatch name="Muted FG" variable="--muted-foreground" className="bg-muted-foreground" />
                   <Swatch name="Accent" variable="--accent" className="bg-accent" />
                   <Swatch name="Destructive" variable="--destructive" className="bg-destructive" />
+                  <Swatch name="Warning" variable="--warning" className="bg-warning" />
+                  <Swatch name="Success" variable="--success" className="bg-success" />
                   <Swatch name="Ring" variable="--ring" className="bg-ring" />
                 </div>
               </div>
@@ -289,7 +287,7 @@ export function ThemeReference() {
                   <Badge variant="secondary">Secondary</Badge>
                   <Badge variant="outline">Outline</Badge>
                   <Badge variant="destructive">Destructive</Badge>
-                  <Badge className="bg-yellow-500 text-black">Warning</Badge>
+                  <Badge className="bg-warning text-warning-foreground">Warning</Badge>
                 </div>
               </div>
 
@@ -400,7 +398,7 @@ export function ThemeReference() {
                       <Bluetooth size={size} />
                       <Radio size={size} />
                     </div>
-                    <span className="font-mono text-[10px] text-muted-foreground">
+                    <span className="font-mono text-xs text-muted-foreground">
                       {label}
                     </span>
                   </div>
@@ -424,15 +422,15 @@ export function ThemeReference() {
                       </span>
                     </p>
                   </div>
-                  <div className="flex items-center gap-2 rounded-md bg-yellow-500/10 p-3">
+                  <div className="flex items-center gap-2 rounded-md bg-warning/10 p-3">
                     <TriangleAlert
                       size={14}
-                      className="shrink-0 text-yellow-500"
+                      className="shrink-0 text-warning"
                     />
                     <p className="text-xs">
-                      <span className="font-medium text-yellow-500">Warning</span>{" "}
+                      <span className="font-medium text-warning">Warning</span>{" "}
                       <span className="text-muted-foreground">
-                        — Yellow-500 on yellow-500/10 background
+                        — Warning on warning/10 background
                       </span>
                     </p>
                   </div>
@@ -445,12 +443,12 @@ export function ThemeReference() {
                       </span>
                     </p>
                   </div>
-                  <div className="flex items-center gap-2 rounded-md bg-green-500/10 p-3">
-                    <Check size={14} className="shrink-0 text-green-500" />
+                  <div className="flex items-center gap-2 rounded-md bg-success/10 p-3">
+                    <Check size={14} className="shrink-0 text-success" />
                     <p className="text-xs">
-                      <span className="font-medium text-green-500">Success</span>{" "}
+                      <span className="font-medium text-success">Success</span>{" "}
                       <span className="text-muted-foreground">
-                        — Green-500 on green-500/10 background
+                        — Success on success/10 background
                       </span>
                     </p>
                   </div>
@@ -519,6 +517,10 @@ const CSS_VARS = [
   "--accent-foreground",
   "--destructive",
   "--destructive-foreground",
+  "--warning",
+  "--warning-foreground",
+  "--success",
+  "--success-foreground",
   "--border",
   "--input",
   "--ring",
@@ -539,7 +541,7 @@ function CssVariablesDump() {
 
   return (
     <div className="overflow-x-auto rounded-md bg-secondary/50 px-3 py-2">
-      <pre className="font-mono text-[11px] leading-relaxed">
+      <pre className="font-mono text-xs leading-relaxed">
         {CSS_VARS.map((v) => {
           const val = style.getPropertyValue(v).trim() || "(not set)";
           return (
