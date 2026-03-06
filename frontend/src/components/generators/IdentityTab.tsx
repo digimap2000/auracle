@@ -180,12 +180,12 @@ export function IdentityTab({ peerId: _peerId }: IdentityTabProps) {
   const errors = useMemo(() => diagnostics.filter((d) => d.level === "error"), [diagnostics]);
 
   return (
-    <ResizablePanelGroup orientation="vertical" className="h-full">
+    <ResizablePanelGroup orientation="vertical">
       {/* Top: form + preview */}
       <ResizablePanel defaultSize={75} minSize={40}>
-        <div className="flex h-full">
+        <div className="flex h-full overflow-hidden">
           {/* Form — 2/3 */}
-          <div className="flex w-2/3 min-w-0 flex-col">
+          <div className="flex w-2/3 min-w-0 flex-col overflow-hidden">
             <ScrollArea className="h-full">
               <div className="px-4 py-3">
                 {/* Order matches preview: name, appearance, manufacturer, mfr data, description */}

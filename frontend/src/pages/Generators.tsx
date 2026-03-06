@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import {
   ChevronDown,
   Plus,
@@ -7,6 +7,8 @@ import {
   Megaphone,
   Layers,
   AudioLines,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -15,20 +17,15 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import {
-  Sidebar,
-  SidebarContent,
-  SidebarGroup,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuItem,
-  SidebarMenuSub,
-  SidebarMenuSubButton,
-  SidebarMenuSubItem,
-  SidebarProvider,
-  SidebarTrigger,
-} from "@/components/ui/sidebar";
+  ResizablePanelGroup,
+  ResizablePanel,
+  ResizableHandle,
+} from "@/components/ui/resizable";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { IdentityTab } from "@/components/generators/IdentityTab";
+import { ICON_SIZE } from "@/lib/icons";
+import { CapLabel } from "@/components/ui/cap-label";
 
 // ── Sidebar data types ──────────────────────────────────────────────
 
@@ -67,35 +64,86 @@ const INITIAL_OVERLAYS: BehaviourOverlay[] = [
 
 // ── Collapsible section heading ─────────────────────────────────────
 
-const headingButtonClass =
-  "flex size-5 items-center justify-center rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground";
+const actionButtonClass =
+  "flex size-5 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground";
 
 interface SectionHeadingProps {
   title: string;
+  isActive?: boolean;
   onAdd?: () => void;
+  onClick?: () => void;
 }
 
-function SectionHeading({ title, onAdd }: SectionHeadingProps) {
+function SectionHeading({ title, isActive, onAdd, onClick }: SectionHeadingProps) {
   return (
-    <div className="flex h-8 items-center gap-1 px-2">
-      <CollapsibleTrigger className="flex flex-1 items-center gap-1.5 text-sm">
+    <div
+      className={cn(
+        "group/heading flex h-8 items-center gap-1 rounded-md px-2 transition-colors hover:bg-secondary/50",
+        isActive && "bg-secondary",
+      )}
+    >
+      <CollapsibleTrigger
+        className="flex flex-1 items-center gap-1.5 text-sm"
+        onClick={onClick}
+      >
         <ChevronDown className="size-3 transition-transform group-data-[state=closed]/collapsible:-rotate-90" />
-        <span className="truncate font-medium">{title}</span>
+        <CapLabel className="font-medium">{title}</CapLabel>
       </CollapsibleTrigger>
       {onAdd && (
         <button
           title={`Add ${title.toLowerCase()}`}
           onClick={onAdd}
-          className={headingButtonClass}
+          className={cn(actionButtonClass, "opacity-0 group-hover/heading:opacity-100")}
         >
           <Plus className="size-4" />
         </button>
       )}
-      <button title="More options" className={headingButtonClass}>
+      <button
+        title="More options"
+        className={cn(actionButtonClass, "opacity-0 group-hover/heading:opacity-100")}
+      >
         <EllipsisVertical className="size-4" />
       </button>
     </div>
   );
+}
+
+// ── Sidebar menu item ───────────────────────────────────────────────
+
+interface MenuItemProps {
+  label: string;
+  isActive?: boolean;
+  onClick?: () => void;
+}
+
+function MenuItem({ label, isActive, onClick }: MenuItemProps) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "flex h-8 w-full items-center rounded-md px-2 text-sm transition-colors hover:bg-secondary/50",
+        isActive
+          ? "bg-accent/15 text-accent"
+          : "text-muted-foreground hover:text-foreground",
+      )}
+    >
+      <CapLabel>{label}</CapLabel>
+    </button>
+  );
+}
+
+// ── Sidebar layout persistence ──────────────────────────────────────
+
+const SIDEBAR_STORAGE_KEY = "auracle-gen-sidebar-v2";
+const DEFAULT_SIDEBAR_PCT = "18%";
+
+function getSavedSidebarSize(): string {
+  const stored = localStorage.getItem(SIDEBAR_STORAGE_KEY);
+  if (stored) {
+    const parsed = parseFloat(stored);
+    if (!isNaN(parsed) && parsed >= 10 && parsed <= 30) return `${parsed}%`;
+  }
+  return DEFAULT_SIDEBAR_PCT;
 }
 
 // ── Page ─────────────────────────────────────────────────────────────
@@ -108,6 +156,17 @@ export function Generators() {
     INITIAL_PEERS[0]?.id ?? "",
   );
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarSize] = useState(getSavedSidebarSize);
+
+  const handleLayoutChanged = useCallback(
+    (layout: Record<string, number>) => {
+      const size = layout["sidebar"];
+      if (size != null) {
+        localStorage.setItem(SIDEBAR_STORAGE_KEY, String(size));
+      }
+    },
+    [],
+  );
 
   const handleAddPeer = () => {
     const id = crypto.randomUUID();
@@ -120,116 +179,105 @@ export function Generators() {
   };
 
   return (
-    <SidebarProvider
-      className="h-full !min-h-0"
-      open={sidebarOpen}
-      onOpenChange={setSidebarOpen}
+    <ResizablePanelGroup
+      orientation="horizontal"
+      onLayoutChanged={handleLayoutChanged}
+      className="h-full"
     >
-      <Sidebar
-        collapsible="none"
+      {/* ── Sidebar ─────────────────────────────────────────── */}
+      <ResizablePanel
+        id="sidebar"
+        defaultSize={sidebarSize}
+        minSize="10%"
+        maxSize="30%"
         className={cn(
-          "shrink-0 overflow-hidden transition-[width] duration-200 ease-linear",
-          sidebarOpen ? "!w-52" : "!w-0",
+          "transition-[flex] duration-200 ease-linear",
+          !sidebarOpen && "!flex-[0]",
         )}
       >
-        <SidebarHeader>
-          <div className="flex flex-col gap-0 px-0.5">
+        <nav className="flex h-full flex-col overflow-hidden bg-sidebar text-sidebar-foreground">
+          <div className="flex flex-col gap-0 p-3">
             <span className="text-sm font-medium">Generators</span>
-            <span className="text-xs text-sidebar-foreground/50">
+            <span className="text-xs text-muted-foreground">
               Broadcast stream generators
             </span>
           </div>
-        </SidebarHeader>
-        <SidebarContent>
-          <SidebarGroup>
-            <SidebarMenu>
-              {/* Scenarios */}
+          <ScrollArea className="flex-1">
+            <div className="space-y-1 px-1">
               <Collapsible defaultOpen className="group/collapsible">
-                <SidebarMenuItem>
-                  <SectionHeading title="Scenarios" />
-                  <CollapsibleContent>
-                    <SidebarMenuSub>
-                      {scenarios.map((scenario) => (
-                        <SidebarMenuSubItem key={scenario.id}>
-                          <SidebarMenuSubButton asChild>
-                            <button>
-                              <span>{scenario.name}</span>
-                            </button>
-                          </SidebarMenuSubButton>
-                        </SidebarMenuSubItem>
-                      ))}
-                    </SidebarMenuSub>
-                  </CollapsibleContent>
-                </SidebarMenuItem>
+                <SectionHeading title="Scenarios" />
+                <CollapsibleContent>
+                  <div className="ml-3 space-y-0.5 border-l pl-2">
+                    {scenarios.map((scenario) => (
+                      <MenuItem key={scenario.id} label={scenario.name} />
+                    ))}
+                  </div>
+                </CollapsibleContent>
               </Collapsible>
 
-              {/* Test Peers */}
               <Collapsible defaultOpen className="group/collapsible">
-                <SidebarMenuItem>
-                  <SectionHeading title="Test Peers" onAdd={handleAddPeer} />
-                  <CollapsibleContent>
-                    <SidebarMenuSub>
-                      {peers.map((peer) => (
-                        <SidebarMenuSubItem key={peer.id}>
-                          <SidebarMenuSubButton
-                            asChild
-                            isActive={selectedId === peer.id}
-                          >
-                            <button onClick={() => setSelectedId(peer.id)}>
-                              <span>{peer.name}</span>
-                            </button>
-                          </SidebarMenuSubButton>
-                        </SidebarMenuSubItem>
-                      ))}
-                    </SidebarMenuSub>
-                  </CollapsibleContent>
-                </SidebarMenuItem>
+                <SectionHeading title="Test Peers" onAdd={handleAddPeer} />
+                <CollapsibleContent>
+                  <div className="ml-3 space-y-0.5 border-l pl-2">
+                    {peers.map((peer) => (
+                      <MenuItem
+                        key={peer.id}
+                        label={peer.name}
+                        isActive={selectedId === peer.id}
+                        onClick={() => setSelectedId(peer.id)}
+                      />
+                    ))}
+                  </div>
+                </CollapsibleContent>
               </Collapsible>
 
-              {/* Behaviour Overlays */}
               <Collapsible defaultOpen className="group/collapsible">
-                <SidebarMenuItem>
-                  <SectionHeading title="Behaviour Overlays" />
-                  <CollapsibleContent>
-                    <SidebarMenuSub>
-                      {overlays.map((overlay) => (
-                        <SidebarMenuSubItem key={overlay.id}>
-                          <SidebarMenuSubButton asChild>
-                            <button>
-                              <span>{overlay.name}</span>
-                            </button>
-                          </SidebarMenuSubButton>
-                        </SidebarMenuSubItem>
-                      ))}
-                    </SidebarMenuSub>
-                  </CollapsibleContent>
-                </SidebarMenuItem>
+                <SectionHeading title="Behaviour Overlays" />
+                <CollapsibleContent>
+                  <div className="ml-3 space-y-0.5 border-l pl-2">
+                    {overlays.map((overlay) => (
+                      <MenuItem key={overlay.id} label={overlay.name} />
+                    ))}
+                  </div>
+                </CollapsibleContent>
               </Collapsible>
-            </SidebarMenu>
-          </SidebarGroup>
-        </SidebarContent>
-      </Sidebar>
+            </div>
+          </ScrollArea>
+        </nav>
+      </ResizablePanel>
 
-      {/* Main content */}
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <Tabs defaultValue="identity" className="flex flex-1 flex-col">
+      <ResizableHandle />
+
+      {/* ── Main content ────────────────────────────────────── */}
+      <ResizablePanel id="content">
+        <Tabs defaultValue="identity" className="flex h-full flex-col overflow-hidden">
           <div className="flex shrink-0 items-center gap-1 px-2 pt-1">
-            <SidebarTrigger className="size-7" />
+            <button
+              onClick={() => setSidebarOpen((prev) => !prev)}
+              className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+              title={sidebarOpen ? "Close sidebar" : "Open sidebar"}
+            >
+              {sidebarOpen ? (
+                <PanelLeftClose size={ICON_SIZE.sm} />
+              ) : (
+                <PanelLeftOpen size={ICON_SIZE.sm} />
+              )}
+            </button>
             <TabsList variant="line" className="h-9">
               <TabsTrigger value="identity" className="gap-1.5 text-xs">
-                <Fingerprint size={14} />
+                <Fingerprint size={ICON_SIZE.sm} />
                 Identity
               </TabsTrigger>
               <TabsTrigger value="advertising" className="gap-1.5 text-xs">
-                <Megaphone size={14} />
+                <Megaphone size={ICON_SIZE.sm} />
                 Advertising
               </TabsTrigger>
               <TabsTrigger value="services" className="gap-1.5 text-xs">
-                <Layers size={14} />
+                <Layers size={ICON_SIZE.sm} />
                 Services
               </TabsTrigger>
               <TabsTrigger value="streams" className="gap-1.5 text-xs">
-                <AudioLines size={14} />
+                <AudioLines size={ICON_SIZE.sm} />
                 Streams
               </TabsTrigger>
             </TabsList>
@@ -237,7 +285,7 @@ export function Generators() {
 
           <TabsContent
             value="identity"
-            className="flex-1 overflow-hidden data-[state=inactive]:hidden"
+            className="min-h-0 flex-1 overflow-hidden data-[state=inactive]:hidden"
             forceMount
           >
             <IdentityTab key={selectedId} peerId={selectedId} />
@@ -270,7 +318,7 @@ export function Generators() {
             </div>
           </TabsContent>
         </Tabs>
-      </div>
-    </SidebarProvider>
+      </ResizablePanel>
+    </ResizablePanelGroup>
   );
 }

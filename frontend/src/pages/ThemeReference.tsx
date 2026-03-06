@@ -59,10 +59,10 @@ function SpacingScale() {
           </span>
           <div
             className="h-3 rounded-sm bg-primary"
-            style={{ width: `${s * 4}px` }}
+            style={{ width: `${s * 0.25}rem` }}
           />
           <span className="font-mono text-xs text-muted-foreground">
-            {s * 4}px
+            {s * 0.25}rem
           </span>
         </div>
       ))}
@@ -103,30 +103,35 @@ function RadiusScale() {
 function TypographySamples() {
   return (
     <div className="space-y-3">
+      <p className="text-xs text-muted-foreground">
+        Root font size: 14px — all rem values resolve against this base.
+      </p>
       {(
         [
-          ["text-2xl font-bold", "2xl bold — Page heading"],
-          ["text-xl font-semibold", "xl semibold — Section heading"],
-          ["text-lg font-medium", "lg medium — Sub-heading"],
-          ["text-base", "base — Body text (16px)"],
-          ["text-sm", "sm — Secondary text (14px)"],
-          ["text-xs", "xs — Captions & labels (12px)"],
+          ["text-2xl font-bold", "2xl bold — Page heading", "1.5rem"],
+          ["text-xl font-semibold", "xl semibold — Section heading", "1.25rem"],
+          ["text-lg font-medium", "lg medium — Sub-heading", "1.125rem"],
+          ["text-base", "base — Body text", "1rem"],
+          ["text-sm", "sm — Secondary text", "0.875rem"],
+          ["text-xs", "xs — Captions & labels", "0.75rem"],
         ] as const
-      ).map(([cls, label]) => (
-        <div key={cls}>
+      ).map(([cls, label, rem]) => (
+        <div key={cls} className="flex items-baseline gap-3">
           <p className={`font-sans ${cls}`}>{label}</p>
+          <span className="font-mono text-xs text-muted-foreground/50">{rem}</span>
         </div>
       ))}
       <Separator />
       <p className="text-xs text-muted-foreground">Monospace (Geist Mono)</p>
       {(
         [
-          ["text-sm font-mono", "sm mono — Code / data"],
-          ["text-xs font-mono", "xs mono — IDs, hex, byte counts"],
+          ["text-sm font-mono", "sm mono — Code / data", "0.875rem"],
+          ["text-xs font-mono", "xs mono — IDs, hex, byte counts", "0.75rem"],
         ] as const
-      ).map(([cls, label]) => (
-        <div key={cls}>
+      ).map(([cls, label, rem]) => (
+        <div key={cls} className="flex items-baseline gap-3">
           <p className={cls}>{label}</p>
+          <span className="font-mono text-xs text-muted-foreground/50">{rem}</span>
         </div>
       ))}
     </div>
@@ -222,7 +227,7 @@ export function ThemeReference() {
                   Spacing Scale
                 </h3>
                 <p className="text-xs text-muted-foreground">
-                  Tailwind spacing units (1 unit = 4px)
+                  Tailwind spacing units (1 unit = 0.25rem = 3.5px at 14px root)
                 </p>
                 <SpacingScale />
               </div>
