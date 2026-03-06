@@ -1,172 +1,281 @@
 import { useState } from "react";
 import {
-  ChevronRight,
+  ChevronDown,
   Plus,
-  Radio,
+  EllipsisVertical,
   Fingerprint,
   Megaphone,
   Layers,
   AudioLines,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
+import { cn } from "@/lib/utils";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
+  SidebarProvider,
+  SidebarTrigger,
+} from "@/components/ui/sidebar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Header } from "@/components/layout/Header";
 import { IdentityTab } from "@/components/generators/IdentityTab";
 
-interface DefinedDevice {
+// ── Sidebar data types ──────────────────────────────────────────────
+
+interface TestPeer {
   id: string;
   name: string;
 }
 
-const INITIAL_DEVICES: DefinedDevice[] = [
+interface Scenario {
+  id: string;
+  name: string;
+}
+
+interface BehaviourOverlay {
+  id: string;
+  name: string;
+}
+
+// ── Placeholder data ────────────────────────────────────────────────
+
+const INITIAL_SCENARIOS: Scenario[] = [
+  { id: "s1", name: "Single speaker broadcast" },
+  { id: "s2", name: "Multi-room sync" },
+];
+
+const INITIAL_PEERS: TestPeer[] = [
   { id: "1", name: "Mu-so 2 Kitchen" },
   { id: "2", name: "Bathys V2 Proto" },
   { id: "3", name: "nRF5340 DK #1" },
 ];
 
-export function Generators() {
-  const [devices, setDevices] = useState<DefinedDevice[]>(INITIAL_DEVICES);
-  const [selectedId, setSelectedId] = useState<string>(INITIAL_DEVICES[0]?.id ?? "");
-  const [collapsed, setCollapsed] = useState(false);
+const INITIAL_OVERLAYS: BehaviourOverlay[] = [
+  { id: "o1", name: "Disconnect after 30 s" },
+  { id: "o2", name: "Corrupt metadata" },
+];
 
-  const handleAddDevice = () => {
+// ── Collapsible section heading ─────────────────────────────────────
+
+const headingButtonClass =
+  "flex size-5 items-center justify-center rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground";
+
+interface SectionHeadingProps {
+  title: string;
+  onAdd?: () => void;
+}
+
+function SectionHeading({ title, onAdd }: SectionHeadingProps) {
+  return (
+    <div className="flex h-8 items-center gap-1 px-2">
+      <CollapsibleTrigger className="flex flex-1 items-center gap-1.5 text-sm">
+        <ChevronDown className="size-3 transition-transform group-data-[state=closed]/collapsible:-rotate-90" />
+        <span className="truncate font-medium">{title}</span>
+      </CollapsibleTrigger>
+      {onAdd && (
+        <button
+          title={`Add ${title.toLowerCase()}`}
+          onClick={onAdd}
+          className={headingButtonClass}
+        >
+          <Plus className="size-4" />
+        </button>
+      )}
+      <button title="More options" className={headingButtonClass}>
+        <EllipsisVertical className="size-4" />
+      </button>
+    </div>
+  );
+}
+
+// ── Page ─────────────────────────────────────────────────────────────
+
+export function Generators() {
+  const [scenarios] = useState<Scenario[]>(INITIAL_SCENARIOS);
+  const [peers, setPeers] = useState<TestPeer[]>(INITIAL_PEERS);
+  const [overlays] = useState<BehaviourOverlay[]>(INITIAL_OVERLAYS);
+  const [selectedId, setSelectedId] = useState<string>(
+    INITIAL_PEERS[0]?.id ?? "",
+  );
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  const handleAddPeer = () => {
     const id = crypto.randomUUID();
-    const newDevice: DefinedDevice = {
+    const newPeer: TestPeer = {
       id,
-      name: `Device ${devices.length + 1}`,
+      name: `Peer ${peers.length + 1}`,
     };
-    setDevices((prev) => [...prev, newDevice]);
+    setPeers((prev) => [...prev, newPeer]);
     setSelectedId(id);
   };
 
   return (
-    <div className="flex h-full flex-col">
-      <Header
-        title="Generators"
-        description="Configure broadcast stream generators"
-      />
-      <div className="flex flex-1 overflow-hidden">
-        {/* Device sidebar */}
-        <div
-          className={`flex shrink-0 flex-col border-r transition-[width] ${collapsed ? "w-10" : "w-56"}`}
-        >
-          <div className="flex h-9 shrink-0 items-center justify-between px-3">
-            {!collapsed && (
-              <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-                Devices
-              </span>
-            )}
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              onClick={() => setCollapsed((c) => !c)}
-              className="text-muted-foreground"
-            >
-              <ChevronRight
-                size={14}
-                className={`transition-transform ${collapsed ? "" : "rotate-180"}`}
-              />
-            </Button>
+    <SidebarProvider
+      className="h-full !min-h-0 bg-sidebar"
+      open={sidebarOpen}
+      onOpenChange={setSidebarOpen}
+    >
+      <Sidebar
+        collapsible="none"
+        className={cn(
+          "shrink-0 overflow-hidden transition-[width] duration-200 ease-linear",
+          sidebarOpen ? "!w-52" : "!w-0",
+        )}
+      >
+        <SidebarHeader>
+          <div className="flex flex-col gap-0 px-0.5">
+            <span className="text-sm font-medium">Generators</span>
+            <span className="text-[11px] text-sidebar-foreground/50">
+              Broadcast stream generators
+            </span>
           </div>
-          <Separator />
-          {!collapsed && (
-            <>
-              <ScrollArea className="flex-1">
-                <div className="p-1.5">
-                  {devices.map((device) => (
-                    <button
-                      key={device.id}
-                      onClick={() => setSelectedId(device.id)}
-                      className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs transition-colors ${
-                        selectedId === device.id
-                          ? "bg-secondary text-foreground"
-                          : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
-                      }`}
-                    >
-                      <Radio size={14} className="shrink-0" />
-                      <span className="truncate">{device.name}</span>
-                    </button>
-                  ))}
-                </div>
-              </ScrollArea>
-              <Separator />
-              <div className="p-1.5">
-                <Button
-                  variant="ghost"
-                  size="xs"
-                  className="w-full justify-start gap-2 text-muted-foreground"
-                  onClick={handleAddDevice}
-                >
-                  <Plus size={14} />
-                  Add Device
-                </Button>
-              </div>
-            </>
-          )}
-        </div>
+        </SidebarHeader>
+        <SidebarContent>
+          <SidebarGroup>
+            <SidebarMenu>
+              {/* Scenarios */}
+              <Collapsible defaultOpen className="group/collapsible">
+                <SidebarMenuItem>
+                  <SectionHeading title="Scenarios" />
+                  <CollapsibleContent>
+                    <SidebarMenuSub>
+                      {scenarios.map((scenario) => (
+                        <SidebarMenuSubItem key={scenario.id}>
+                          <SidebarMenuSubButton asChild>
+                            <button>
+                              <span>{scenario.name}</span>
+                            </button>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      ))}
+                    </SidebarMenuSub>
+                  </CollapsibleContent>
+                </SidebarMenuItem>
+              </Collapsible>
 
-        {/* Tabbed configuration panel */}
-        <div className="flex flex-1 flex-col overflow-hidden">
-          <Tabs defaultValue="identity" className="flex flex-1 flex-col">
-            <div className="shrink-0 border-b px-4">
-              <TabsList variant="line" className="h-9">
-                <TabsTrigger value="identity" className="gap-1.5 text-xs">
-                  <Fingerprint size={14} />
-                  Identity
-                </TabsTrigger>
-                <TabsTrigger value="advertising" className="gap-1.5 text-xs">
-                  <Megaphone size={14} />
-                  Advertising
-                </TabsTrigger>
-                <TabsTrigger value="services" className="gap-1.5 text-xs">
-                  <Layers size={14} />
-                  Services
-                </TabsTrigger>
-                <TabsTrigger value="streams" className="gap-1.5 text-xs">
-                  <AudioLines size={14} />
-                  Streams
-                </TabsTrigger>
-              </TabsList>
+              {/* Test Peers */}
+              <Collapsible defaultOpen className="group/collapsible">
+                <SidebarMenuItem>
+                  <SectionHeading title="Test Peers" onAdd={handleAddPeer} />
+                  <CollapsibleContent>
+                    <SidebarMenuSub>
+                      {peers.map((peer) => (
+                        <SidebarMenuSubItem key={peer.id}>
+                          <SidebarMenuSubButton
+                            asChild
+                            isActive={selectedId === peer.id}
+                          >
+                            <button onClick={() => setSelectedId(peer.id)}>
+                              <span>{peer.name}</span>
+                            </button>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      ))}
+                    </SidebarMenuSub>
+                  </CollapsibleContent>
+                </SidebarMenuItem>
+              </Collapsible>
+
+              {/* Behaviour Overlays */}
+              <Collapsible defaultOpen className="group/collapsible">
+                <SidebarMenuItem>
+                  <SectionHeading title="Behaviour Overlays" />
+                  <CollapsibleContent>
+                    <SidebarMenuSub>
+                      {overlays.map((overlay) => (
+                        <SidebarMenuSubItem key={overlay.id}>
+                          <SidebarMenuSubButton asChild>
+                            <button>
+                              <span>{overlay.name}</span>
+                            </button>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      ))}
+                    </SidebarMenuSub>
+                  </CollapsibleContent>
+                </SidebarMenuItem>
+              </Collapsible>
+            </SidebarMenu>
+          </SidebarGroup>
+        </SidebarContent>
+      </Sidebar>
+
+      {/* Main content — rounded inset card */}
+      <div
+        className={cn(
+          "flex flex-1 flex-col overflow-hidden rounded-xl bg-background shadow-sm transition-[margin] duration-200 ease-linear",
+          sidebarOpen ? "my-2 mr-2" : "m-2",
+        )}
+      >
+        <Tabs defaultValue="identity" className="flex flex-1 flex-col">
+          <div className="flex shrink-0 items-center gap-1 px-2 pt-1">
+            <SidebarTrigger className="size-7" />
+            <TabsList variant="line" className="h-9">
+              <TabsTrigger value="identity" className="gap-1.5 text-xs">
+                <Fingerprint size={14} />
+                Identity
+              </TabsTrigger>
+              <TabsTrigger value="advertising" className="gap-1.5 text-xs">
+                <Megaphone size={14} />
+                Advertising
+              </TabsTrigger>
+              <TabsTrigger value="services" className="gap-1.5 text-xs">
+                <Layers size={14} />
+                Services
+              </TabsTrigger>
+              <TabsTrigger value="streams" className="gap-1.5 text-xs">
+                <AudioLines size={14} />
+                Streams
+              </TabsTrigger>
+            </TabsList>
+          </div>
+
+          <TabsContent
+            value="identity"
+            className="flex-1 overflow-hidden data-[state=inactive]:hidden"
+            forceMount
+          >
+            <IdentityTab key={selectedId} peerId={selectedId} />
+          </TabsContent>
+          <TabsContent value="advertising" className="flex-1 overflow-auto">
+            <div className="p-4 text-center text-muted-foreground">
+              <Megaphone className="mx-auto mb-3 size-8 opacity-30" />
+              <p className="text-sm">Advertising parameters</p>
+              <p className="mt-1 text-[11px]">
+                Broadcast name, interval, and advertising data configuration
+              </p>
             </div>
-
-            <TabsContent value="identity" className="flex-1 overflow-hidden data-[state=inactive]:hidden" forceMount>
-              <IdentityTab key={selectedId} deviceId={selectedId} />
-            </TabsContent>
-            <TabsContent value="advertising" className="flex-1 overflow-auto">
-              <div className="p-4 text-center text-muted-foreground">
-                <Megaphone className="mx-auto mb-3 size-8 opacity-30" />
-                <p className="text-sm">
-                  Advertising parameters
-                </p>
-                <p className="mt-1 text-[11px]">
-                  Broadcast name, interval, and advertising data
-                  configuration
-                </p>
-              </div>
-            </TabsContent>
-            <TabsContent value="services" className="flex-1 overflow-auto">
-              <div className="p-4 text-center text-muted-foreground">
-                <Layers className="mx-auto mb-3 size-8 opacity-30" />
-                <p className="text-sm">GATT services</p>
-                <p className="mt-1 text-[11px]">
-                  Service definitions and characteristic configuration
-                </p>
-              </div>
-            </TabsContent>
-            <TabsContent value="streams" className="flex-1 overflow-auto">
-              <div className="p-4 text-center text-muted-foreground">
-                <AudioLines className="mx-auto mb-3 size-8 opacity-30" />
-                <p className="text-sm">Audio streams</p>
-                <p className="mt-1 text-[11px]">
-                  Codec, sample rate, bitrate, and BIS configuration
-                </p>
-              </div>
-            </TabsContent>
-          </Tabs>
-        </div>
+          </TabsContent>
+          <TabsContent value="services" className="flex-1 overflow-auto">
+            <div className="p-4 text-center text-muted-foreground">
+              <Layers className="mx-auto mb-3 size-8 opacity-30" />
+              <p className="text-sm">GATT services</p>
+              <p className="mt-1 text-[11px]">
+                Service definitions and characteristic configuration
+              </p>
+            </div>
+          </TabsContent>
+          <TabsContent value="streams" className="flex-1 overflow-auto">
+            <div className="p-4 text-center text-muted-foreground">
+              <AudioLines className="mx-auto mb-3 size-8 opacity-30" />
+              <p className="text-sm">Audio streams</p>
+              <p className="mt-1 text-[11px]">
+                Codec, sample rate, bitrate, and BIS configuration
+              </p>
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
-    </div>
+    </SidebarProvider>
   );
 }

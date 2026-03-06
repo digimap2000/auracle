@@ -40,10 +40,10 @@ import { FormField } from "@/components/forms/FormField";
 import { DataInput } from "@/components/forms/DataInput";
 import { HexDump } from "@/components/forms/HexDump";
 import {
-  DEFAULT_DEVICE_IDENTITY,
+  DEFAULT_PEER_IDENTITY,
   MANUFACTURER_OPTIONS,
   APPEARANCE_OPTIONS,
-  type DeviceIdentity,
+  type PeerIdentity,
 } from "./types";
 
 // ── Diagnostics ─────────────────────────────────────────────────────
@@ -56,14 +56,14 @@ interface Diagnostic {
   message: string;
 }
 
-function validate(identity: DeviceIdentity): Diagnostic[] {
+function validate(identity: PeerIdentity): Diagnostic[] {
   const diags: Diagnostic[] = [];
 
   if (!identity.advertisedName.trim()) {
     diags.push({
       level: "warning",
       field: "advertisedName",
-      message: "Advertised Name is empty — scanners will not display a name for this device.",
+      message: "Advertised Name is empty — scanners will not display a name for this peer.",
     });
   }
 
@@ -84,14 +84,14 @@ const FIELD_HELP: Record<string, FieldHelp> = {
     title: "Advertised Name",
     hint: "Complete Local Name included in advertising data",
     detail:
-      "The GAP Complete Local Name (AD Type 0x09) that BLE scanners will see when discovering this device. It appears in scan results and is the primary human-readable identifier for the broadcast. Maximum 248 bytes UTF-8 encoded.",
+      "The GAP Complete Local Name (AD Type 0x09) that BLE scanners will see when discovering this peer. It appears in scan results and is the primary human-readable identifier for the broadcast. Maximum 248 bytes UTF-8 encoded.",
     example: "Mu-so 2 Kitchen, Bathys V2, nRF5340 DK Auracast",
   },
   appearanceCode: {
     title: "Appearance",
     hint: "GAP Appearance value describing device category",
     detail:
-      "The Appearance characteristic (AD Type 0x19) helps scanners display an appropriate icon or description for this device. Values are defined in the Bluetooth SIG Assigned Numbers document, Section 6. The 16-bit value encodes both a category and sub-category.",
+      "The Appearance characteristic (AD Type 0x19) helps scanners display an appropriate icon or description for this peer. Values are defined in the Bluetooth SIG Assigned Numbers document, Section 6. The 16-bit value encodes both a category and sub-category.",
     example: "0x0042 Standalone Speaker, 0x0841 Headphones, 0x0B41 Generic Broadcast Device",
   },
   manufacturerId: {
@@ -139,17 +139,17 @@ const APPEARANCE_ICONS: Record<string, LucideIcon> = {
 // ── Component ───────────────────────────────────────────────────────
 
 interface IdentityTabProps {
-  deviceId: string;
+  peerId: string;
 }
 
-export function IdentityTab({ deviceId: _deviceId }: IdentityTabProps) {
-  const [identity, setIdentity] = useState<DeviceIdentity>(
-    DEFAULT_DEVICE_IDENTITY
+export function IdentityTab({ peerId: _peerId }: IdentityTabProps) {
+  const [identity, setIdentity] = useState<PeerIdentity>(
+    DEFAULT_PEER_IDENTITY
   );
   const [hoveredField, setHoveredField] = useState<string | null>(null);
 
   const update = useCallback(
-    <K extends keyof DeviceIdentity>(field: K, value: DeviceIdentity[K]) => {
+    <K extends keyof PeerIdentity>(field: K, value: PeerIdentity[K]) => {
       setIdentity((prev) => ({ ...prev, [field]: value }));
     },
     []
@@ -184,7 +184,7 @@ export function IdentityTab({ deviceId: _deviceId }: IdentityTabProps) {
       <ResizablePanel defaultSize={75} minSize={40}>
         <div className="flex h-full">
           {/* Form — 2/3 */}
-          <div className="flex w-2/3 flex-col border-r">
+          <div className="flex w-2/3 min-w-0 flex-col border-r">
             <ScrollArea className="h-full">
               <div className="px-4 py-3">
                 {/* Order matches preview: name, appearance, manufacturer, mfr data, description */}
@@ -287,47 +287,45 @@ export function IdentityTab({ deviceId: _deviceId }: IdentityTabProps) {
           </div>
 
           {/* Preview — 1/3 */}
-          <div className="flex w-1/3 flex-col">
-            <ScrollArea className="h-full">
-              <div className="flex flex-col items-center px-4 py-8">
-                {/* Appearance icon */}
-                <div className="flex size-20 items-center justify-center rounded-2xl bg-secondary">
-                  <AppearanceIcon size={40} className="text-muted-foreground" />
-                </div>
-
-                {/* Device name */}
-                <p className="mt-4 text-center text-base font-medium">
-                  {identity.advertisedName || (
-                    <span className="text-muted-foreground/40">Untitled</span>
-                  )}
-                </p>
-
-                {/* Appearance label */}
-                <p className="mt-0.5 text-center text-xs text-muted-foreground">
-                  {appearanceLabel}
-                </p>
-
-                {/* Manufacturer badge */}
-                {manufacturerName && (
-                  <Badge variant="outline" className="mt-3 text-[11px]">
-                    {manufacturerName}
-                  </Badge>
-                )}
-
-                {/* Manufacturer data hex dump */}
-                {identity.manufacturerData && (
-                  <>
-                    <Separator className="my-4 w-full" />
-                    <div className="w-full">
-                      <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                        Manufacturer Data
-                      </p>
-                      <HexDump data={identity.manufacturerData} bytesPerLine={8} />
-                    </div>
-                  </>
-                )}
+          <div className="w-1/3 min-w-0 overflow-y-auto">
+            <div className="flex flex-col items-center px-4 py-8">
+              {/* Appearance icon */}
+              <div className="flex size-20 shrink-0 items-center justify-center rounded-2xl bg-secondary">
+                <AppearanceIcon size={40} className="text-muted-foreground" />
               </div>
-            </ScrollArea>
+
+              {/* Peer name */}
+              <p className="mt-4 max-w-full truncate text-center text-base font-medium">
+                {identity.advertisedName || (
+                  <span className="text-muted-foreground/40">Untitled</span>
+                )}
+              </p>
+
+              {/* Appearance label */}
+              <p className="mt-0.5 text-center text-xs text-muted-foreground">
+                {appearanceLabel}
+              </p>
+
+              {/* Manufacturer badge */}
+              {manufacturerName && (
+                <Badge variant="outline" className="mt-3 text-[11px]">
+                  {manufacturerName}
+                </Badge>
+              )}
+
+              {/* Manufacturer data hex dump */}
+              {identity.manufacturerData && (
+                <>
+                  <Separator className="my-4 w-full" />
+                  <div className="w-full min-w-0">
+                    <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                      Manufacturer Data
+                    </p>
+                    <HexDump data={identity.manufacturerData} bytesPerLine={8} />
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </ResizablePanel>

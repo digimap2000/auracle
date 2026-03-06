@@ -1,5 +1,5 @@
-/** Identity configuration for a device definition */
-export interface DeviceIdentity {
+/** Identity configuration for a test peer definition */
+export interface PeerIdentity {
   /** BLE advertised name (Complete Local Name) */
   advertisedName: string;
   /** Bluetooth SIG company ID for manufacturer data */
@@ -8,11 +8,11 @@ export interface DeviceIdentity {
   manufacturerData: string;
   /** GAP Appearance value (16-bit code) */
   appearanceCode: string;
-  /** Device description (human-readable note, not broadcast) */
+  /** Peer description (human-readable note, not broadcast) */
   description: string;
 }
 
-export const DEFAULT_DEVICE_IDENTITY: DeviceIdentity = {
+export const DEFAULT_PEER_IDENTITY: PeerIdentity = {
   advertisedName: "",
   manufacturerId: "",
   manufacturerData: "",
