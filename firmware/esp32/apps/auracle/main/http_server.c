@@ -1,4 +1,5 @@
 #include "http_server.h"
+#include "discovery.h"
 #include "uart_proto.h"
 #include "device_proto.h"
 #include "wifi_manager.h"
@@ -6,6 +7,7 @@
 
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include "esp_http_server.h"
 #include "esp_log.h"
 #include "esp_timer.h"
@@ -24,6 +26,56 @@ static void set_cors_headers(httpd_req_t *req)
     httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
     httpd_resp_set_hdr(req, "Access-Control-Allow-Methods", "GET, POST, OPTIONS");
     httpd_resp_set_hdr(req, "Access-Control-Allow-Headers", "Content-Type");
+}
+
+static esp_err_t send_json_root(httpd_req_t *req, cJSON *root)
+{
+    char *json_str;
+    esp_err_t err;
+
+    if (!root) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "JSON allocation failed");
+        return ESP_ERR_NO_MEM;
+    }
+
+    json_str = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    if (!json_str) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "JSON render failed");
+        return ESP_ERR_NO_MEM;
+    }
+
+    httpd_resp_set_type(req, "application/json");
+    err = httpd_resp_send(req, json_str, HTTPD_RESP_USE_STRLEN);
+    free(json_str);
+    return err;
+}
+
+static size_t get_limit_query_param(httpd_req_t *req, size_t default_limit, size_t max_limit)
+{
+    char query[64];
+    char value[16];
+    int query_len = httpd_req_get_url_query_len(req);
+
+    if (query_len <= 0 || query_len >= (int)sizeof(query)) {
+        return default_limit;
+    }
+    if (httpd_req_get_url_query_str(req, query, sizeof(query)) != ESP_OK) {
+        return default_limit;
+    }
+    if (httpd_query_key_value(query, "limit", value, sizeof(value)) != ESP_OK) {
+        return default_limit;
+    }
+
+    char *endptr = NULL;
+    long parsed = strtol(value, &endptr, 10);
+    if (!endptr || *endptr != '\0' || parsed <= 0) {
+        return default_limit;
+    }
+    if ((size_t)parsed > max_limit) {
+        return max_limit;
+    }
+    return (size_t)parsed;
 }
 
 /* ── GET /api/status ──────────────────────────────────────────── */
@@ -59,6 +111,11 @@ static esp_err_t handle_status(httpd_req_t *req)
         }
     }
 
+    cJSON *discovery = discovery_json_create_summary();
+    if (discovery) {
+        cJSON_AddItemToObject(root, "discovery", discovery);
+    }
+
     /* WiFi */
     cJSON *wifi = cJSON_AddObjectToObject(root, "wifi");
     const char *wifi_state = "unknown";
@@ -74,13 +131,7 @@ static esp_err_t handle_status(httpd_req_t *req)
     cJSON_AddNumberToObject(wifi, "rssi",    st.wifi_rssi);
     cJSON_AddNumberToObject(wifi, "channel", st.wifi_channel);
 
-    char *json_str = cJSON_PrintUnformatted(root);
-    cJSON_Delete(root);
-
-    httpd_resp_set_type(req, "application/json");
-    esp_err_t err = httpd_resp_send(req, json_str, HTTPD_RESP_USE_STRLEN);
-    free(json_str);
-    return err;
+    return send_json_root(req, root);
 }
 
 /* ── POST /api/command ────────────────────────────────────────── */
@@ -181,13 +232,29 @@ static esp_err_t handle_wifi_status(httpd_req_t *req)
     cJSON_AddNumberToObject(root, "rssi",    st.wifi_rssi);
     cJSON_AddNumberToObject(root, "channel", st.wifi_channel);
 
-    char *json_str = cJSON_PrintUnformatted(root);
-    cJSON_Delete(root);
+    return send_json_root(req, root);
+}
 
-    httpd_resp_set_type(req, "application/json");
-    esp_err_t err = httpd_resp_send(req, json_str, HTTPD_RESP_USE_STRLEN);
-    free(json_str);
-    return err;
+/* ── GET /api/discovery/... ───────────────────────────────────── */
+
+static esp_err_t handle_discovery_summary(httpd_req_t *req)
+{
+    set_cors_headers(req);
+    return send_json_root(req, discovery_json_create_summary());
+}
+
+static esp_err_t handle_discovery_reports(httpd_req_t *req)
+{
+    size_t limit = get_limit_query_param(req, 20, CONFIG_AURACLE_MSG_RING_SIZE);
+    set_cors_headers(req);
+    return send_json_root(req, discovery_json_create_reports(limit, true));
+}
+
+static esp_err_t handle_discovery_devices(httpd_req_t *req)
+{
+    size_t limit = get_limit_query_param(req, 32, 128);
+    set_cors_headers(req);
+    return send_json_root(req, discovery_json_create_devices(limit));
 }
 
 /* ── POST /api/wifi/configure ─────────────────────────────────── */
@@ -219,7 +286,7 @@ static esp_err_t handle_options(httpd_req_t *req)
 esp_err_t http_server_start(void)
 {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.max_uri_handlers = 12;
+    config.max_uri_handlers = 16;
     config.max_open_sockets = CONFIG_AURACLE_HTTP_MAX_SSE_CLIENTS + 4;
     config.lru_purge_enable = true;
     config.server_port      = CONFIG_AURACLE_HTTP_PORT;
@@ -233,6 +300,9 @@ esp_err_t http_server_start(void)
 
     const httpd_uri_t uris[] = {
         { "/api/status",          HTTP_GET,     handle_status,          NULL },
+        { "/api/discovery/summary", HTTP_GET,   handle_discovery_summary, NULL },
+        { "/api/discovery/reports", HTTP_GET,   handle_discovery_reports, NULL },
+        { "/api/discovery/devices", HTTP_GET,   handle_discovery_devices, NULL },
         { "/api/command",         HTTP_POST,    handle_command,         NULL },
         { "/api/events",          HTTP_GET,     handle_events,          NULL },
         { "/api/device/discover", HTTP_POST,    handle_device_discover, NULL },

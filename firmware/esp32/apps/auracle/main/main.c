@@ -1,4 +1,5 @@
 #include "status.h"
+#include "discovery.h"
 #include "uart_proto.h"
 #include "device_proto.h"
 #include "wifi_manager.h"
@@ -88,19 +89,22 @@ void app_main(void)
     /* 2. Shared status */
     ESP_ERROR_CHECK(status_init());
 
-    /* 3. UART transport to nRF5340 */
+    /* 3. Discovery cache / normalization layer */
+    ESP_ERROR_CHECK(discovery_init());
+
+    /* 4. UART transport to nRF5340 */
     ESP_ERROR_CHECK(uart_proto_init());
 
-    /* 4. Device protocol task — discovery + polling */
+    /* 5. Device protocol task — discovery + polling */
     xTaskCreate(device_task, "device", 4096, NULL, 5, NULL);
 
-    /* 5. WiFi — blocks until STA connected (runs provisioning if needed) */
+    /* 6. WiFi — blocks until STA connected (runs provisioning if needed) */
     ESP_ERROR_CHECK(wifi_manager_init());
 
-    /* 6. mDNS — discoverable as auracle.local */
+    /* 7. mDNS — discoverable as auracle.local */
     init_mdns();  /* Non-fatal if this fails */
 
-    /* 7. HTTP API server */
+    /* 8. HTTP API server */
     ESP_ERROR_CHECK(http_server_start());
 
     ESP_LOGI(TAG, "═══════════════════════════════════════");

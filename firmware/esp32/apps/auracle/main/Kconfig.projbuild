@@ -33,14 +33,14 @@ menu "Auracle Bridge Configuration"
 
     endmenu
 
-    menu "Wire Protocol"
+    menu "Discovery Cache"
 
         config AURACLE_MSG_RING_SIZE
-            int "Message ring buffer depth"
+            int "Recent advertisement report depth"
             default 64
             help
-                Max parsed wire protocol messages held for SSE clients and status queries.
-                Oldest messages are overwritten when full.
+                Max normalized discovery reports retained for HTTP queries.
+                Oldest reports are overwritten when full.
 
     endmenu
 

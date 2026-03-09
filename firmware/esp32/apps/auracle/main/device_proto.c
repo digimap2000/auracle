@@ -1,4 +1,5 @@
 #include "device_proto.h"
+#include "discovery.h"
 #include "uart_proto.h"
 
 #include <string.h>
@@ -268,14 +269,10 @@ static void protocol_handle_event(const cJSON *root, const char *event_name)
     }
 
     if (strcmp(event_name, "adv") == 0) {
-        const cJSON *addr = cJSON_GetObjectItem(root, "addr");
-        const cJSON *rssi = cJSON_GetObjectItem(root, "rssi");
-        const cJSON *data_len = cJSON_GetObjectItem(root, "data_len");
-
-        ESP_LOGD(TAG, "  adv  addr='%s'  rssi=%d  len=%d",
-                 cJSON_IsString(addr) ? addr->valuestring : "?",
-                 cJSON_IsNumber(rssi) ? (int)rssi->valuedouble : 0,
-                 cJSON_IsNumber(data_len) ? (int)data_len->valuedouble : 0);
+        esp_err_t err = discovery_ingest_adv_json(root);
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "  adv ingest failed: %s", esp_err_to_name(err));
+        }
         return;
     }
 

@@ -2,6 +2,7 @@ idf_component_register(
     SRCS
         "main.c"
         "status.c"
+        "discovery.c"
         "uart_proto.c"
         "device_proto.c"
         "http_server.c"
