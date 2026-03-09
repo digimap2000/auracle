@@ -118,22 +118,15 @@ static void handle_get_info_response(const cJSON *root, bool ok)
      * Parse flexibly — copy any identity fields that are present.
      * We do not require all fields; a device may omit any of them.
      */
-    copy_str_field(s_info.device, sizeof(s_info.device),
-                   cJSON_GetObjectItem(root, "device"));
-    copy_str_field(s_info.model,  sizeof(s_info.model),
-                   cJSON_GetObjectItem(root, "model"));
-    copy_str_field(s_info.fw,     sizeof(s_info.fw),
-                   cJSON_GetObjectItem(root, "fw"));
-
-    const cJSON *proto = cJSON_GetObjectItem(root, "protocol");
-    if (cJSON_IsNumber(proto)) {
-        s_info.protocol = (int)proto->valuedouble;
-    }
+    copy_str_field(s_info.name, sizeof(s_info.name),
+                   cJSON_GetObjectItem(root, "name"));
+    copy_str_field(s_info.version, sizeof(s_info.version),
+                   cJSON_GetObjectItem(root, "version"));
 
     s_info.info_ok = true;
 
-    ESP_LOGI(TAG, "Device info  device='%s'  model='%s'  fw='%s'  protocol=%d",
-             s_info.device, s_info.model, s_info.fw, s_info.protocol);
+    ESP_LOGI(TAG, "Device info  name='%s'  version='%s'",
+             s_info.name, s_info.version);
 
     /* Advance startup sequence: send get_capabilities */
     if (protocol_send_request("get_capabilities") == ESP_OK) {
@@ -153,70 +146,38 @@ static void handle_get_capabilities_response(const cJSON *root, bool ok)
     }
 
     const cJSON *caps = cJSON_GetObjectItem(root, "capabilities");
-    if (!cJSON_IsObject(caps)) {
+    if (!cJSON_IsArray(caps)) {
         /*
-         * Response was ok=true but lacks a "capabilities" object.
+         * Response was ok=true but lacks a "capabilities" array.
          * Accept it — the device may not support all optional fields.
          */
-        ESP_LOGW(TAG, "get_capabilities: 'capabilities' object absent; accepting");
+        ESP_LOGW(TAG, "get_capabilities: 'capabilities' array absent; accepting");
         s_info.capabilities_ok = true;
         s_startup_state = STARTUP_DONE;
         ESP_LOGI(TAG, "Startup discovery complete (no capability detail)");
         return;
     }
 
-    const cJSON *has_bat = cJSON_GetObjectItem(caps, "has_battery");
-    if (cJSON_IsBool(has_bat)) {
-        s_info.has_battery = cJSON_IsTrue(has_bat);
-    }
-
-    const cJSON *max_vol = cJSON_GetObjectItem(caps, "max_volume");
-    if (cJSON_IsNumber(max_vol)) {
-        s_info.max_volume = (int)max_vol->valuedouble;
-    }
-
-    /* commands array */
-    const cJSON *cmds_arr = cJSON_GetObjectItem(caps, "commands");
-    if (cJSON_IsArray(cmds_arr)) {
-        const cJSON *item;
-        cJSON_ArrayForEach(item, cmds_arr) {
-            if (!cJSON_IsString(item)) continue;
-            if (s_info.command_count >= DEVICE_MAX_COMMANDS) {
-                ESP_LOGW(TAG, "get_capabilities: commands list truncated at %d",
-                         DEVICE_MAX_COMMANDS);
-                break;
-            }
-            strncpy(s_info.commands[s_info.command_count], item->valuestring,
-                    DEVICE_STR_MAX - 1);
-            s_info.commands[s_info.command_count][DEVICE_STR_MAX - 1] = '\0';
-            s_info.command_count++;
+    const cJSON *item;
+    cJSON_ArrayForEach(item, caps) {
+        if (!cJSON_IsString(item)) {
+            continue;
         }
-    }
-
-    /* events array */
-    const cJSON *evts_arr = cJSON_GetObjectItem(caps, "events");
-    if (cJSON_IsArray(evts_arr)) {
-        const cJSON *item;
-        cJSON_ArrayForEach(item, evts_arr) {
-            if (!cJSON_IsString(item)) continue;
-            if (s_info.event_count >= DEVICE_MAX_EVENTS) {
-                ESP_LOGW(TAG, "get_capabilities: events list truncated at %d",
-                         DEVICE_MAX_EVENTS);
-                break;
-            }
-            strncpy(s_info.events[s_info.event_count], item->valuestring,
-                    DEVICE_STR_MAX - 1);
-            s_info.events[s_info.event_count][DEVICE_STR_MAX - 1] = '\0';
-            s_info.event_count++;
+        if (s_info.capability_count >= DEVICE_MAX_CAPABILITIES) {
+            ESP_LOGW(TAG, "get_capabilities: capability list truncated at %d",
+                     DEVICE_MAX_CAPABILITIES);
+            break;
         }
+        strncpy(s_info.capabilities[s_info.capability_count], item->valuestring,
+                DEVICE_STR_MAX - 1);
+        s_info.capabilities[s_info.capability_count][DEVICE_STR_MAX - 1] = '\0';
+        s_info.capability_count++;
     }
 
     s_info.capabilities_ok = true;
     s_startup_state = STARTUP_DONE;
 
-    ESP_LOGI(TAG, "Device capabilities  commands=%d  events=%d  max_vol=%d  battery=%s",
-             s_info.command_count, s_info.event_count,
-             s_info.max_volume, s_info.has_battery ? "yes" : "no");
+    ESP_LOGI(TAG, "Device capabilities  count=%d", s_info.capability_count);
     ESP_LOGI(TAG, "Startup discovery complete — device is known");
 }
 
@@ -290,16 +251,31 @@ static void protocol_handle_event(const cJSON *root, const char *event_name)
     if (strcmp(event_name, "ready") == 0) {
         s_info.ready_seen = true;
 
-        const cJSON *dev  = cJSON_GetObjectItem(root, "device");
-        const cJSON *fw   = cJSON_GetObjectItem(root, "fw");
-        const cJSON *prot = cJSON_GetObjectItem(root, "protocol");
+        ESP_LOGI(TAG, "  ready");
 
-        ESP_LOGI(TAG, "  ready  device='%s'  fw='%s'  protocol=%d",
-                 cJSON_IsString(dev)  ? dev->valuestring  : "?",
-                 cJSON_IsString(fw)   ? fw->valuestring   : "?",
-                 cJSON_IsNumber(prot) ? (int)prot->valuedouble : -1);
+        /*
+         * Restart discovery whenever the device signals ready.
+         * This handles the common timing race where the device finishes
+         * booting after the ESP32 already sent (and timed out on) get_info.
+         * Skip if we are already mid-handshake (waiting for a response).
+         */
+        if (s_startup_state != STARTUP_WAITING_INFO &&
+            s_startup_state != STARTUP_WAITING_CAPS) {
+            ESP_LOGI(TAG, "  restarting discovery on ready event");
+            protocol_query_startup_info();
+        }
+        return;
+    }
 
-        /* Log it — do not treat it as a signal to delay sending get_info */
+    if (strcmp(event_name, "adv") == 0) {
+        const cJSON *addr = cJSON_GetObjectItem(root, "addr");
+        const cJSON *rssi = cJSON_GetObjectItem(root, "rssi");
+        const cJSON *data_len = cJSON_GetObjectItem(root, "data_len");
+
+        ESP_LOGD(TAG, "  adv  addr='%s'  rssi=%d  len=%d",
+                 cJSON_IsString(addr) ? addr->valuestring : "?",
+                 cJSON_IsNumber(rssi) ? (int)rssi->valuedouble : 0,
+                 cJSON_IsNumber(data_len) ? (int)data_len->valuedouble : 0);
         return;
     }
 
@@ -400,6 +376,11 @@ void protocol_query_startup_info(void)
 bool attached_device_is_known(void)
 {
     return s_info.info_ok && s_info.capabilities_ok;
+}
+
+bool attached_device_startup_failed(void)
+{
+    return s_startup_state == STARTUP_FAILED;
 }
 
 const DeviceInfo *attached_device_get_info(void)

@@ -11,13 +11,13 @@ menu "Auracle Bridge Configuration"
 
         config AURACLE_UART_TX_PIN
             int "UART TX GPIO pin"
-            default 20
+            default 43
             help
                 ESP32-S3 GPIO pin for UART TX to nRF5340 RX.
 
         config AURACLE_UART_RX_PIN
             int "UART RX GPIO pin"
-            default 21
+            default 44
             help
                 ESP32-S3 GPIO pin for UART RX from nRF5340 TX.
 

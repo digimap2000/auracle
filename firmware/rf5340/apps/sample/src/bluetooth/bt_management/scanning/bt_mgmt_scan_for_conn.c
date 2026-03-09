@@ -16,6 +16,10 @@
 
 #include "bt_mgmt.h"
 
+#if defined(CONFIG_AURACLE_ESP_CONN)
+#include "esp_conn.h"
+#endif
+
 #include <zephyr/logging/log.h>
 LOG_MODULE_DECLARE(bt_mgmt_scan);
 
@@ -316,6 +320,9 @@ static bool csip_found(struct bt_data *data, void *user_data)
  */
 static void scan_recv_cb(const struct bt_le_scan_recv_info *info, struct net_buf_simple *ad)
 {
+#if defined(CONFIG_AURACLE_ESP_CONN)
+	esp_conn_send_adv_report(info, ad->data, ad->len);
+#endif
 
 	/* We only care about connectable advertisers */
 	if (!(info->adv_props & BT_GAP_ADV_PROP_CONNECTABLE)) {

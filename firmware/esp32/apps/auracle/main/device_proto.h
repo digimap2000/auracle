@@ -7,8 +7,8 @@
  * device_proto — JSON Lines v1 protocol logic
  *
  * Handles request/response/event dispatch for the attached device UART
- * protocol. Runs a two-step startup discovery (get_info → get_capabilities)
- * and stores results in a DeviceInfo struct.
+ * protocol. Runs a two-step startup discovery (get_info -> get_capabilities)
+ * and stores a compact device identity/capability snapshot.
  *
  * Threading model:
  *   All protocol state is accessed only inside attached_device_process(),
@@ -24,8 +24,7 @@
  */
 
 #define DEVICE_STR_MAX      32
-#define DEVICE_MAX_COMMANDS 16
-#define DEVICE_MAX_EVENTS   16
+#define DEVICE_MAX_CAPABILITIES 8
 
 /**
  * Information about the attached device gathered during startup discovery.
@@ -39,20 +38,12 @@ typedef struct {
     bool ready_seen;       /* Unsolicited "ready" event received */
 
     /* From get_info */
-    char device[DEVICE_STR_MAX];  /* e.g. "audio_df" */
-    char model[DEVICE_STR_MAX];   /* e.g. "nrf5340"  */
-    char fw[DEVICE_STR_MAX];      /* e.g. "1.2.3"    */
-    int  protocol;                /* Protocol version integer */
+    char name[DEVICE_STR_MAX];
+    char version[DEVICE_STR_MAX];
 
     /* From get_capabilities */
-    bool has_battery;
-    int  max_volume;
-
-    char commands[DEVICE_MAX_COMMANDS][DEVICE_STR_MAX];
-    int  command_count;
-
-    char events[DEVICE_MAX_EVENTS][DEVICE_STR_MAX];
-    int  event_count;
+    char capabilities[DEVICE_MAX_CAPABILITIES][DEVICE_STR_MAX];
+    int  capability_count;
 } DeviceInfo;
 
 /* ── Protocol interface (called by uart_proto) ─────────────────── */
@@ -78,6 +69,12 @@ void protocol_query_startup_info(void);
  * successfully. False during discovery, on timeout, or before it starts.
  */
 bool attached_device_is_known(void);
+
+/**
+ * Returns true if startup discovery timed out or the device returned an
+ * error. False while discovery is in progress or if it succeeded.
+ */
+bool attached_device_startup_failed(void);
 
 /**
  * Returns a pointer to the device info struct. Always valid (never NULL).

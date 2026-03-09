@@ -1,12 +1,14 @@
 #include "status.h"
-#include "wire_uart.h"
-#include "wire_proto.h"
+#include "uart_proto.h"
+#include "device_proto.h"
 #include "wifi_manager.h"
 #include "http_server.h"
 
 #include "esp_log.h"
 #include "nvs_flash.h"
 #include "mdns.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 static const char *TAG = "main";
 
@@ -37,6 +39,42 @@ static esp_err_t init_mdns(void)
     return ESP_OK;
 }
 
+/* ── Device task ──────────────────────────────────────────────── */
+
+/*
+ * Runs startup discovery then polls the UART for incoming lines and
+ * checks for request timeouts. Runs forever at a 10ms tick.
+ */
+static void device_task(void *arg)
+{
+    (void)arg;
+    attached_device_start_discovery();
+
+    uint32_t last_retry_ms = 0;
+
+    while (1) {
+        attached_device_process();
+
+        /*
+         * Belt-and-suspenders retry: if startup discovery failed and the
+         * device hasn't sent a "ready" event to trigger automatic restart,
+         * re-attempt every 10 seconds. This recovers from cases where the
+         * ready event was lost (e.g., received before our UART task started).
+         */
+        if (attached_device_startup_failed()) {
+            uint32_t now_ms = (uint32_t)((uint64_t)xTaskGetTickCount()
+                                         * portTICK_PERIOD_MS);
+            if (now_ms - last_retry_ms >= 10000u) {
+                ESP_LOGI(TAG, "Retrying startup discovery...");
+                attached_device_start_discovery();
+                last_retry_ms = now_ms;
+            }
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+}
+
 void app_main(void)
 {
     ESP_LOGI(TAG, "═══════════════════════════════════════");
@@ -50,11 +88,11 @@ void app_main(void)
     /* 2. Shared status */
     ESP_ERROR_CHECK(status_init());
 
-    /* 3. UART to nRF5340 */
-    ESP_ERROR_CHECK(wire_uart_init());
+    /* 3. UART transport to nRF5340 */
+    ESP_ERROR_CHECK(uart_proto_init());
 
-    /* 4. Wire protocol parser + ring buffer */
-    ESP_ERROR_CHECK(wire_proto_init());
+    /* 4. Device protocol task — discovery + polling */
+    xTaskCreate(device_task, "device", 4096, NULL, 5, NULL);
 
     /* 5. WiFi — blocks until STA connected (runs provisioning if needed) */
     ESP_ERROR_CHECK(wifi_manager_init());

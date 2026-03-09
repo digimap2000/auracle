@@ -49,14 +49,14 @@ static esp_err_t handle_status(httpd_req_t *req)
         cJSON_AddBoolToObject(device, "ready_seen", true);
     }
     if (dev->info_ok) {
-        cJSON_AddStringToObject(device, "device",   dev->device);
-        cJSON_AddStringToObject(device, "model",    dev->model);
-        cJSON_AddStringToObject(device, "fw",       dev->fw);
-        cJSON_AddNumberToObject(device, "protocol", dev->protocol);
+        cJSON_AddStringToObject(device, "name",    dev->name);
+        cJSON_AddStringToObject(device, "version", dev->version);
     }
     if (dev->capabilities_ok) {
-        cJSON_AddBoolToObject(device,   "has_battery", dev->has_battery);
-        cJSON_AddNumberToObject(device, "max_volume",  dev->max_volume);
+        cJSON *caps = cJSON_AddArrayToObject(device, "capabilities");
+        for (int i = 0; i < dev->capability_count; i++) {
+            cJSON_AddItemToArray(caps, cJSON_CreateString(dev->capabilities[i]));
+        }
     }
 
     /* WiFi */
@@ -87,7 +87,8 @@ static esp_err_t handle_status(httpd_req_t *req)
 
 /*
  * Forward a raw JSON Lines command to the device over UART.
- * Body must be a compact JSON object, max 255 bytes (protocol line limit).
+ * Body must be a compact JSON object, max 1023 bytes (protocol line limit
+ * minus the appended newline).
  * Returns immediately — the device response is dispatched asynchronously
  * by attached_device_process() and is not returned here.
  */
@@ -95,8 +96,7 @@ static esp_err_t handle_command(httpd_req_t *req)
 {
     set_cors_headers(req);
 
-    /* 255 = LINE_MAX_LEN(256) - 1 byte for the appended '\n' */
-    char body[255] = {0};
+    char body[1023] = {0};
     int received = httpd_req_recv(req, body, sizeof(body) - 1);
     if (received <= 0) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Empty body");

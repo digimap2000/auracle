@@ -18,12 +18,12 @@ static const char *TAG = "uart_proto";
 #define BAUD_RATE           CONFIG_AURACLE_UART_BAUD_RATE
 #define RX_BUF_SIZE         CONFIG_AURACLE_UART_RX_BUF_SIZE
 
-/* Maximum line length including the terminating '\n', per spec. */
-#define LINE_MAX_LEN        256
+/* Maximum line length including the terminating '\n'. */
+#define LINE_MAX_LEN        1024
 
 /*
  * Depth of the FreeRTOS queue between the UART RX task and
- * uart_proto_poll_rx(). At 256 bytes per item this is 2 KB.
+ * uart_proto_poll_rx(). At 1024 bytes per item this is 8 KB.
  */
 #define LINE_QUEUE_DEPTH    8
 
@@ -50,12 +50,12 @@ typedef enum { RX_NORMAL, RX_DISCARD } rx_state_t;
  * Discard mode: entered when an incoming line would exceed LINE_MAX_LEN.
  * Bytes are thrown away until the next '\n', then normal mode resumes.
  *
- * Line length accounting (LINE_MAX_LEN = 256):
- *   - Content bytes occupy buf[0..254], null terminator at buf[255].
- *   - When line_pos reaches LINE_MAX_LEN-1 (255), the next content byte
+ * Line length accounting (LINE_MAX_LEN = 1024):
+ *   - Content bytes occupy buf[0..1022], null terminator at buf[1023].
+ *   - When line_pos reaches LINE_MAX_LEN-1 (1023), the next content byte
  *     would overflow the null terminator slot → enter discard mode.
- *   - A '\n' at line_pos == 255 is processed normally (strip optional '\r'
- *     at pos 254, null-terminate at pos 255), so 255-byte lines are valid.
+ *   - A '\n' at line_pos == 1023 is processed normally (strip optional '\r'
+ *     at pos 1022, null-terminate at pos 1023), so 1023-byte lines are valid.
  */
 static void process_byte(uint8_t ch, char *buf, int *pos, rx_state_t *state)
 {

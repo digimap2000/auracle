@@ -15,6 +15,12 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(bt_mgmt_scan, CONFIG_BT_MGMT_SCAN_LOG_LEVEL);
 
+#if defined(CONFIG_AURACLE_ESP_CONN)
+#define BT_MGMT_SCAN_OPTIONS 0
+#else
+#define BT_MGMT_SCAN_OPTIONS BT_LE_SCAN_OPT_FILTER_DUPLICATE
+#endif
+
 static char srch_name[BLE_SEARCH_NAME_MAX_LEN];
 
 static void addr_print(void)
@@ -56,7 +62,7 @@ int bt_mgmt_scan_start(uint16_t scan_intvl, uint16_t scan_win, enum bt_mgmt_scan
 	}
 
 	struct bt_le_scan_param *scan_param =
-		BT_LE_SCAN_PARAM(NRF5340_AUDIO_GATEWAY_SCAN_TYPE, BT_LE_SCAN_OPT_FILTER_DUPLICATE,
+		BT_LE_SCAN_PARAM(NRF5340_AUDIO_GATEWAY_SCAN_TYPE, BT_MGMT_SCAN_OPTIONS,
 				 scan_interval, scan_window);
 
 	if (type == BT_MGMT_SCAN_TYPE_CONN && IS_ENABLED(CONFIG_BT_CENTRAL)) {

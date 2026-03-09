@@ -239,4 +239,14 @@ config AURACLE_WIRE
 	  communication with the Auracle desktop application.
 	  Device reports raw BLE observations; desktop does all decoding.
 
+config AURACLE_ESP_CONN
+	bool "Auracle ESP32 bridge connection over physical UART"
+	default n
+	help
+	  Enable JSON Lines v1 protocol over UART2 (P1.12 TX / P1.13 RX)
+	  for communication with the ESP32-S3 bridge.
+	  The ESP32 acts as the controller (client); the nRF5340 is the
+	  device (server). Responds to get_info and get_capabilities, and
+	  sends a "ready" event on startup.
+
 endmenu # Modules

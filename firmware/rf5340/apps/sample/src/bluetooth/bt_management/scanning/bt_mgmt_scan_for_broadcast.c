@@ -22,6 +22,9 @@
 #if defined(CONFIG_AURACLE_WIRE)
 #include "wire.h"
 #endif
+#if defined(CONFIG_AURACLE_ESP_CONN)
+#include "esp_conn.h"
+#endif
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_DECLARE(bt_mgmt_scan);
@@ -192,6 +195,10 @@ static void scan_recv_cb(const struct bt_le_scan_recv_info *info, struct net_buf
 #if defined(CONFIG_AURACLE_WIRE)
 	/* Capture raw ad data before bt_data_parse consumes the buffer */
 	wire_send_adv(info->addr, info->rssi, ad->data, ad->len);
+#endif
+#if defined(CONFIG_AURACLE_ESP_CONN)
+	/* Forward the complete scan report to the host before local parsing. */
+	esp_conn_send_adv_report(info, ad->data, ad->len);
 #endif
 
 	/* We are only interested in non-connectable periodic advertisers */

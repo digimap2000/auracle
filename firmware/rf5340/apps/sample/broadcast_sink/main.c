@@ -26,6 +26,9 @@
 #if defined(CONFIG_AURACLE_WIRE)
 #include "wire.h"
 #endif
+#if defined(CONFIG_AURACLE_ESP_CONN)
+#include "esp_conn.h"
+#endif
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(main, CONFIG_MAIN_LOG_LEVEL);
@@ -586,6 +589,18 @@ int main(void)
 		LOG_WRN("Wire protocol init failed: %d (continuing without)", ret);
 	}
 #endif
+#if defined(CONFIG_AURACLE_ESP_CONN)
+	/*
+	 * Initialise UART2 and enable the RX interrupt early so we don't miss
+	 * bytes that arrive during the rest of boot. The "ready" announcement
+	 * is deferred to the end of main() after all subsystems are running.
+	 */
+	bool esp_conn_ok = (esp_conn_init() == 0);
+
+	if (!esp_conn_ok) {
+		LOG_WRN("ESP32 connection init failed (continuing without)");
+	}
+#endif
 
 	ret = bt_mgmt_init();
 	ERR_CHK(ret);
@@ -624,6 +639,19 @@ int main(void)
 					 CONFIG_BT_AUDIO_BROADCAST_NAME, CONFIG_BT_AUDIO_BROADCAST_ID);
 		ERR_CHK_MSG(ret, "Failed to start scanning");
 	}
+
+#if defined(CONFIG_AURACLE_ESP_CONN)
+	if (esp_conn_ok) {
+		/*
+		 * All subsystems are running. Give the deferred log processor a
+		 * moment to flush boot messages before the protocol announcement.
+		 * Do NOT use log_panic() — it can block indefinitely if the RTT
+		 * buffer fills and no host reader is draining it.
+		 */
+		k_sleep(K_MSEC(200));
+		esp_conn_announce_ready();
+	}
+#endif
 
 	return 0;
 }

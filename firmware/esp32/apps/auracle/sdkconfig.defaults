@@ -21,6 +21,11 @@ CONFIG_ESP_WIFI_SOFTAP_SUPPORT=y
 # FreeRTOS — 1ms tick for responsive UART processing
 CONFIG_FREERTOS_HZ=1000
 
+# Console — USB-Serial-JTAG (built-in USB on GPIO 19/20), not UART0
+# GPIO 43/44 are used for the protocol UART to the nRF5340, so the
+# console must be routed to the USB port instead.
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+
 # UART
 CONFIG_UART_ISR_IN_IRAM=y
 
