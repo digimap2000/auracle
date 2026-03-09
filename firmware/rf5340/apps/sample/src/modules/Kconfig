@@ -246,7 +246,8 @@ config AURACLE_ESP_CONN
 	  Enable JSON Lines v1 protocol over UART2 (P1.12 TX / P1.13 RX)
 	  for communication with the ESP32-S3 bridge.
 	  The ESP32 acts as the controller (client); the nRF5340 is the
-	  device (server). Responds to get_info and get_capabilities, and
-	  sends a "ready" event on startup.
+	  device (server). Responds to get_info, get_capabilities,
+	  get_mode, and set_mode, defaults to monitor mode, and sends a
+	  "ready" event on startup.
 
 endmenu # Modules

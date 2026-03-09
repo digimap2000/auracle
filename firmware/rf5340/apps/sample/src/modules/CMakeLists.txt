@@ -25,4 +25,5 @@ target_sources_ifdef(CONFIG_NRF5340_AUDIO_SD_CARD_LC3_STREAMER app PRIVATE
 target_sources_ifdef(CONFIG_AURACLE_WIRE app PRIVATE
                      ${CMAKE_CURRENT_SOURCE_DIR}/wire.c)
 target_sources_ifdef(CONFIG_AURACLE_ESP_CONN app PRIVATE
+                     ${CMAKE_CURRENT_SOURCE_DIR}/auracle_mode.c
                      ${CMAKE_CURRENT_SOURCE_DIR}/esp_conn.c)

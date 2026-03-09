@@ -21,6 +21,7 @@
  */
 
 #include "esp_conn.h"
+#include "auracle_mode.h"
 
 #include <errno.h>
 #include <stdio.h>
@@ -267,6 +268,39 @@ static bool cmd_is(const char *line, const char *cmd)
 	return strstr(line, needle) != NULL;
 }
 
+static bool extract_string_field(const char *line, const char *key, char *out, size_t out_size)
+{
+	char needle[32];
+	const char *start;
+	const char *end;
+	size_t len;
+
+	if (!line || !key || !out || out_size == 0) {
+		return false;
+	}
+
+	snprintf(needle, sizeof(needle), "\"%s\":\"", key);
+	start = strstr(line, needle);
+	if (!start) {
+		return false;
+	}
+
+	start += strlen(needle);
+	end = strchr(start, '"');
+	if (!end) {
+		return false;
+	}
+
+	len = (size_t)(end - start);
+	if (len == 0 || len >= out_size) {
+		return false;
+	}
+
+	memcpy(out, start, len);
+	out[len] = '\0';
+	return true;
+}
+
 /* ── Request handlers ─────────────────────────────────────────── */
 
 static void handle_get_info(int id)
@@ -288,11 +322,69 @@ static void handle_get_capabilities(int id)
 	char resp[256];
 	int  len = snprintf(resp, sizeof(resp),
 		"{\"id\":%d,\"ok\":true,"
-		"\"capabilities\":[\"auracast_sink\"]}\n",
+		"\"capabilities\":[\"auracast_sink\"],"
+		"\"modes\":[\"monitor\",\"sink\"]}\n",
 		id);
 
 	if (len > 0 && (size_t)len < sizeof(resp) && esp_write(resp, len) == 0) {
 		LOG_INF("TX: get_capabilities response (id=%d)", id);
+	}
+}
+
+static void handle_get_mode(int id)
+{
+	char resp[128];
+	int  len = snprintf(resp, sizeof(resp),
+		"{\"id\":%d,\"ok\":true,\"mode\":\"%s\"}\n",
+		id, auracle_mode_name(auracle_mode_get()));
+
+	if (len > 0 && (size_t)len < sizeof(resp) && esp_write(resp, len) == 0) {
+		LOG_INF("TX: get_mode response (id=%d)", id);
+	}
+}
+
+static void handle_invalid_mode(int id, const char *line)
+{
+	char resp[96];
+	int  len = snprintf(resp, sizeof(resp),
+		"{\"id\":%d,\"ok\":false,\"error\":\"invalid_mode\"}\n", id);
+
+	if (len > 0 && (size_t)len < sizeof(resp) && esp_write(resp, len) == 0) {
+		LOG_WRN("TX: invalid_mode (id=%d  line=%.60s)", id, line);
+	}
+}
+
+static void handle_set_mode(int id, const char *line)
+{
+	char mode_name[16];
+	enum auracle_mode mode;
+	char resp[128];
+	int err;
+	int len;
+
+	if (!extract_string_field(line, "mode", mode_name, sizeof(mode_name))) {
+		handle_invalid_mode(id, line);
+		return;
+	}
+
+	err = auracle_mode_from_str(mode_name, &mode);
+	if (err) {
+		handle_invalid_mode(id, line);
+		return;
+	}
+
+	err = auracle_mode_set(mode);
+	if (err) {
+		handle_invalid_mode(id, line);
+		return;
+	}
+
+	len = snprintf(resp, sizeof(resp),
+		"{\"id\":%d,\"ok\":true,\"mode\":\"%s\"}\n",
+		id, auracle_mode_name(auracle_mode_get()));
+
+	if (len > 0 && (size_t)len < sizeof(resp) && esp_write(resp, len) == 0) {
+		LOG_INF("TX: set_mode response (id=%d mode=%s)", id, auracle_mode_name(mode));
 	}
 }
 
@@ -323,6 +415,10 @@ static void handle_line(const char *line)
 		handle_get_info(id);
 	} else if (cmd_is(line, "get_capabilities")) {
 		handle_get_capabilities(id);
+	} else if (cmd_is(line, "get_mode")) {
+		handle_get_mode(id);
+	} else if (cmd_is(line, "set_mode")) {
+		handle_set_mode(id, line);
 	} else {
 		handle_unknown_cmd(id, line);
 	}

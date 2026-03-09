@@ -28,6 +28,7 @@
 #endif
 #if defined(CONFIG_AURACLE_ESP_CONN)
 #include "esp_conn.h"
+#include "auracle_mode.h"
 #endif
 
 #include <zephyr/logging/log.h>
@@ -276,8 +277,12 @@ static void le_audio_msg_sub_thread(void)
 			}
 
 			if (IS_ENABLED(CONFIG_BT_OBSERVER)) {
+#if defined(CONFIG_AURACLE_ESP_CONN)
+				ret = auracle_mode_apply();
+#else
 				ret = bt_mgmt_scan_start(0, 0, BT_MGMT_SCAN_TYPE_BROADCAST, NULL,
 							 last_broadcast_id);
+#endif
 				if (ret) {
 					if (ret == -EALREADY) {
 						break;
@@ -288,7 +293,7 @@ static void le_audio_msg_sub_thread(void)
 				}
 
 				/* NOTE: The string below is used by the Nordic CI system */
-				LOG_INF("Restarted scanning for broadcaster");
+				LOG_INF("Restarted scan after sync loss");
 			}
 
 			break;
@@ -364,8 +369,12 @@ static void bt_mgmt_msg_sub_thread(void)
 
 			if (IS_ENABLED(CONFIG_BT_OBSERVER) &&
 			    msg.pa_sync_term_reason != BT_HCI_ERR_LOCALHOST_TERM_CONN) {
+#if defined(CONFIG_AURACLE_ESP_CONN)
+				ret = auracle_mode_apply();
+#else
 				ret = bt_mgmt_scan_start(0, 0, BT_MGMT_SCAN_TYPE_BROADCAST, NULL,
 							 BRDCAST_ID_NOT_USED);
+#endif
 				if (ret) {
 					if (ret == -EALREADY) {
 						LOG_ERR("Failed to restart scanning: %d", ret);
@@ -375,7 +384,7 @@ static void bt_mgmt_msg_sub_thread(void)
 				}
 
 				/* NOTE: The string below is used by the Nordic CI system */
-				LOG_INF("Restarted scanning for broadcaster");
+				LOG_INF("Restarted scan after PA sync loss");
 			}
 
 			break;
@@ -635,8 +644,12 @@ int main(void)
 		ret = bt_mgmt_adv_start(0, ext_adv_buf, ext_adv_buf_cnt, NULL, 0, true);
 		ERR_CHK(ret);
 	} else {
+#if defined(CONFIG_AURACLE_ESP_CONN)
+		ret = auracle_mode_apply();
+#else
 		ret = bt_mgmt_scan_start(0, 0, BT_MGMT_SCAN_TYPE_BROADCAST,
 					 CONFIG_BT_AUDIO_BROADCAST_NAME, CONFIG_BT_AUDIO_BROADCAST_ID);
+#endif
 		ERR_CHK_MSG(ret, "Failed to start scanning");
 	}
 

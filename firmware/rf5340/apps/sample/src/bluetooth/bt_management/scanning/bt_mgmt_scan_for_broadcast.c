@@ -24,6 +24,7 @@
 #endif
 #if defined(CONFIG_AURACLE_ESP_CONN)
 #include "esp_conn.h"
+#include "auracle_mode.h"
 #endif
 
 #include <zephyr/logging/log.h>
@@ -246,6 +247,14 @@ static void scan_recv_cb(const struct bt_le_scan_recv_info *info, struct net_buf
 
 	LOG_DBG("Broadcast source %s found, id: 0x%06x", source.name, source.id);
 	id_change_printed = false;
+
+#if defined(CONFIG_AURACLE_ESP_CONN)
+	if (!auracle_mode_allows_broadcast_auto_sync()) {
+		LOG_DBG("Monitor mode active, keeping passive scan for %s", source.name);
+		return;
+	}
+#endif
+
 	periodic_adv_sync(info, source);
 }
 

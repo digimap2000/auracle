@@ -5,7 +5,7 @@
  * The ESP32 bridge is the controller (client); the nRF5340 is the device
  * (server). This module:
  *   - Sends a "ready" event when esp_conn_announce_ready() is called.
- *   - Responds to get_info and get_capabilities requests.
+ *   - Responds to get_info, get_capabilities, get_mode, and set_mode requests.
  *   - Returns unknown_cmd for any other request.
  *   - Provides esp_conn_send_event() for future unsolicited events.
  *
