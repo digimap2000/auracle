@@ -2,11 +2,12 @@ idf_component_register(
     SRCS
         "main.c"
         "status.c"
-        "wire_uart.c"
-        "wire_proto.c"
+        "uart_proto.c"
+        "device_proto.c"
         "http_server.c"
         "wifi_manager.c"
         "captive_portal.c"
+        # wire_uart.c and wire_proto.c are superseded by uart_proto.c / device_proto.c
     INCLUDE_DIRS
         "."
     REQUIRES
