@@ -7,3 +7,17 @@ build/
 Thumbs.db
 .venv/
 *.tsbuildinfo
+
+# KiCad generated/cache files
+hardware/*/fp-info-cache
+hardware/*-backups/
+
+# Bluetooth spec PDFs and digests (large binaries, not source)
+docs/specs/*.pdf
+docs/digest/
+
+# nRF5340 firmware is a separate git repo — manage as submodule separately
+firmware/rf5340/apps/sample/
+
+# Claude Code worktrees
+.claude/worktrees/

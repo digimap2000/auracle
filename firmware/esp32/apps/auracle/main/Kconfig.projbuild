@@ -1,0 +1,92 @@
+menu "Auracle Bridge Configuration"
+
+    menu "UART (nRF5340 Connection)"
+
+        config AURACLE_UART_PORT_NUM
+            int "UART port number"
+            default 1
+            range 0 2
+            help
+                UART peripheral for nRF5340 connection (0=UART0, 1=UART1, 2=UART2).
+
+        config AURACLE_UART_TX_PIN
+            int "UART TX GPIO pin"
+            default 20
+            help
+                ESP32-S3 GPIO pin for UART TX to nRF5340 RX.
+
+        config AURACLE_UART_RX_PIN
+            int "UART RX GPIO pin"
+            default 21
+            help
+                ESP32-S3 GPIO pin for UART RX from nRF5340 TX.
+
+        config AURACLE_UART_BAUD_RATE
+            int "UART baud rate"
+            default 115200
+
+        config AURACLE_UART_RX_BUF_SIZE
+            int "UART RX ring buffer size (bytes)"
+            default 2048
+            help
+                Must hold several NDJSON lines (adv messages can be ~500 bytes).
+
+    endmenu
+
+    menu "Wire Protocol"
+
+        config AURACLE_MSG_RING_SIZE
+            int "Message ring buffer depth"
+            default 64
+            help
+                Max parsed wire protocol messages held for SSE clients and status queries.
+                Oldest messages are overwritten when full.
+
+    endmenu
+
+    menu "WiFi Provisioning"
+
+        config AURACLE_SOFTAP_SSID
+            string "SoftAP SSID"
+            default "Naim-Auracle"
+
+        config AURACLE_SOFTAP_PASSWORD
+            string "SoftAP password (empty = open)"
+            default ""
+
+        config AURACLE_SOFTAP_CHANNEL
+            int "SoftAP WiFi channel"
+            default 1
+            range 1 13
+
+        config AURACLE_STA_CONNECT_TIMEOUT_MS
+            int "STA connection timeout (ms)"
+            default 15000
+
+    endmenu
+
+    menu "HTTP Server"
+
+        config AURACLE_HTTP_PORT
+            int "HTTP server port"
+            default 80
+
+        config AURACLE_SSE_POLL_INTERVAL_MS
+            int "SSE poll interval (ms)"
+            default 50
+            help
+                How often SSE handlers check the ring buffer for new messages.
+
+        config AURACLE_HTTP_MAX_SSE_CLIENTS
+            int "Max simultaneous SSE clients"
+            default 3
+
+    endmenu
+
+    config AURACLE_MDNS_HOSTNAME
+        string "mDNS hostname"
+        default "auracle"
+        help
+            Device reachable at <hostname>.local on the network.
+
+endmenu

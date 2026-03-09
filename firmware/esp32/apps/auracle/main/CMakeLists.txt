@@ -1,0 +1,24 @@
+idf_component_register(
+    SRCS
+        "main.c"
+        "status.c"
+        "wire_uart.c"
+        "wire_proto.c"
+        "http_server.c"
+        "wifi_manager.c"
+        "captive_portal.c"
+    INCLUDE_DIRS
+        "."
+    REQUIRES
+        driver
+        esp_driver_uart
+        esp_wifi
+        esp_http_server
+        nvs_flash
+        esp_event
+        esp_netif
+        espressif__cjson
+        espressif__mdns
+        lwip
+        esp_timer
+)
