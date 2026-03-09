@@ -33,17 +33,6 @@ menu "Auracle Bridge Configuration"
 
     endmenu
 
-    menu "Discovery Cache"
-
-        config AURACLE_MSG_RING_SIZE
-            int "Recent advertisement report depth"
-            default 64
-            help
-                Max normalized discovery reports retained for HTTP queries.
-                Oldest reports are overwritten when full.
-
-    endmenu
-
     menu "WiFi Provisioning"
 
         config AURACLE_SOFTAP_SSID
@@ -65,21 +54,27 @@ menu "Auracle Bridge Configuration"
 
     endmenu
 
-    menu "HTTP Server"
+    menu "Bridge Server"
 
-        config AURACLE_HTTP_PORT
-            int "HTTP server port"
-            default 80
-
-        config AURACLE_SSE_POLL_INTERVAL_MS
-            int "SSE poll interval (ms)"
-            default 50
+        config AURACLE_BRIDGE_TCP_PORT
+            int "TCP bridge port"
+            default 3333
+            range 1 65535
             help
-                How often SSE handlers check the ring buffer for new messages.
+                Single-client raw TCP server port. Bytes are forwarded
+                bidirectionally between the socket and the nRF UART.
 
-        config AURACLE_HTTP_MAX_SSE_CLIENTS
-            int "Max simultaneous SSE clients"
-            default 3
+        config AURACLE_BRIDGE_TASK_STACK_SIZE
+            int "Bridge task stack size"
+            default 6144
+            help
+                Stack size for the TCP bridge server task.
+
+        config AURACLE_BRIDGE_TASK_PRIORITY
+            int "Bridge task priority"
+            default 5
+            help
+                FreeRTOS priority for the TCP bridge server task.
 
     endmenu
 

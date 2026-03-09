@@ -2,13 +2,11 @@ idf_component_register(
     SRCS
         "main.c"
         "status.c"
-        "discovery.c"
-        "uart_proto.c"
-        "device_proto.c"
-        "http_server.c"
+        "uart_bridge.c"
+        "bridge_server.c"
         "wifi_manager.c"
         "captive_portal.c"
-        # wire_uart.c and wire_proto.c are superseded by uart_proto.c / device_proto.c
+        # The ESP32 now acts as a raw UART<->TCP bridge.
     INCLUDE_DIRS
         "."
     REQUIRES
@@ -19,7 +17,6 @@ idf_component_register(
         nvs_flash
         esp_event
         esp_netif
-        espressif__cjson
         espressif__mdns
         lwip
         esp_timer

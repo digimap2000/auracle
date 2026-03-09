@@ -1,9 +1,7 @@
 #include "status.h"
-#include "discovery.h"
-#include "uart_proto.h"
-#include "device_proto.h"
+#include "uart_bridge.h"
+#include "bridge_server.h"
 #include "wifi_manager.h"
-#include "http_server.h"
 
 #include "esp_log.h"
 #include "nvs_flash.h"
@@ -34,46 +32,11 @@ static esp_err_t init_mdns(void)
 
     mdns_hostname_set(CONFIG_AURACLE_MDNS_HOSTNAME);
     mdns_instance_name_set("Auracle Bridge");
-    mdns_service_add(NULL, "_http", "_tcp", CONFIG_AURACLE_HTTP_PORT, NULL, 0);
+    mdns_service_add(NULL, "_auracle", "_tcp", CONFIG_AURACLE_BRIDGE_TCP_PORT, NULL, 0);
 
-    ESP_LOGI(TAG, "mDNS: %s.local", CONFIG_AURACLE_MDNS_HOSTNAME);
+    ESP_LOGI(TAG, "mDNS: %s.local  service=_auracle._tcp  port=%d",
+             CONFIG_AURACLE_MDNS_HOSTNAME, CONFIG_AURACLE_BRIDGE_TCP_PORT);
     return ESP_OK;
-}
-
-/* ── Device task ──────────────────────────────────────────────── */
-
-/*
- * Runs startup discovery then polls the UART for incoming lines and
- * checks for request timeouts. Runs forever at a 10ms tick.
- */
-static void device_task(void *arg)
-{
-    (void)arg;
-    attached_device_start_discovery();
-
-    uint32_t last_retry_ms = 0;
-
-    while (1) {
-        attached_device_process();
-
-        /*
-         * Belt-and-suspenders retry: if startup discovery failed and the
-         * device hasn't sent a "ready" event to trigger automatic restart,
-         * re-attempt every 10 seconds. This recovers from cases where the
-         * ready event was lost (e.g., received before our UART task started).
-         */
-        if (attached_device_startup_failed()) {
-            uint32_t now_ms = (uint32_t)((uint64_t)xTaskGetTickCount()
-                                         * portTICK_PERIOD_MS);
-            if (now_ms - last_retry_ms >= 10000u) {
-                ESP_LOGI(TAG, "Retrying startup discovery...");
-                attached_device_start_discovery();
-                last_retry_ms = now_ms;
-            }
-        }
-
-        vTaskDelay(pdMS_TO_TICKS(10));
-    }
 }
 
 void app_main(void)
@@ -89,25 +52,20 @@ void app_main(void)
     /* 2. Shared status */
     ESP_ERROR_CHECK(status_init());
 
-    /* 3. Discovery cache / normalization layer */
-    ESP_ERROR_CHECK(discovery_init());
+    /* 3. Raw UART transport to nRF5340 */
+    ESP_ERROR_CHECK(uart_bridge_init());
 
-    /* 4. UART transport to nRF5340 */
-    ESP_ERROR_CHECK(uart_proto_init());
-
-    /* 5. Device protocol task — discovery + polling */
-    xTaskCreate(device_task, "device", 4096, NULL, 5, NULL);
-
-    /* 6. WiFi — blocks until STA connected (runs provisioning if needed) */
+    /* 4. WiFi — blocks until STA connected (runs provisioning if needed) */
     ESP_ERROR_CHECK(wifi_manager_init());
 
-    /* 7. mDNS — discoverable as auracle.local */
+    /* 5. mDNS — discoverable as auracle.local */
     init_mdns();  /* Non-fatal if this fails */
 
-    /* 8. HTTP API server */
-    ESP_ERROR_CHECK(http_server_start());
+    /* 6. Raw TCP bridge server */
+    ESP_ERROR_CHECK(bridge_server_start());
 
     ESP_LOGI(TAG, "═══════════════════════════════════════");
-    ESP_LOGI(TAG, "  Ready — http://%s.local/api/status", CONFIG_AURACLE_MDNS_HOSTNAME);
+    ESP_LOGI(TAG, "  Ready — tcp://%s.local:%d", CONFIG_AURACLE_MDNS_HOSTNAME,
+             CONFIG_AURACLE_BRIDGE_TCP_PORT);
     ESP_LOGI(TAG, "═══════════════════════════════════════");
 }

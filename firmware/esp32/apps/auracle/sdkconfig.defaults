@@ -8,12 +8,12 @@ CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 
-# HTTP server
+# HTTP server — used by the provisioning captive portal
 CONFIG_HTTPD_MAX_REQ_HDR_LEN=1024
 CONFIG_HTTPD_MAX_URI_LEN=512
 
-# Networking — enough sockets for multiple SSE clients + REST
-CONFIG_LWIP_MAX_SOCKETS=16
+# Networking — captive portal + single TCP bridge client
+CONFIG_LWIP_MAX_SOCKETS=8
 
 # WiFi
 CONFIG_ESP_WIFI_SOFTAP_SUPPORT=y
