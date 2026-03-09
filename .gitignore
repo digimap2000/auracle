@@ -16,8 +16,6 @@ hardware/*-backups/
 docs/specs/*.pdf
 docs/digest/
 
-# nRF5340 firmware is a separate git repo — manage as submodule separately
-firmware/rf5340/apps/sample/
 
 # Claude Code worktrees
 .claude/worktrees/
