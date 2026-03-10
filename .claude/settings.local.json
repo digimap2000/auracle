@@ -7,7 +7,15 @@
       "WebFetch(domain:raw.githubusercontent.com)",
       "WebFetch(domain:ratulmaharaj.com)",
       "WebFetch(domain:ui.shadcn.com)",
-      "WebFetch(domain:bitbucket.org)"
+      "WebFetch(domain:bitbucket.org)",
+      "mcp__shadcn__get_project_registries",
+      "mcp__shadcn__list_items_in_registries",
+      "mcp__shadcn__view_items_in_registries",
+      "mcp__shadcn__search_items_in_registries",
+      "mcp__shadcn__get_item_examples_from_registries",
+      "mcp__mcp-registry__search_mcp_registry",
+      "mcp__mcp-atlassian__confluence_create_page",
+      "mcp__mcp-atlassian__confluence_search"
     ]
   }
 }

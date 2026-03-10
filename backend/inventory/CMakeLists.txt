@@ -3,6 +3,7 @@ add_library(auracle_inventory
   src/probe_scheduler.cpp
   providers/src/serial_provider.cpp
   providers/src/host_bluetooth_provider.cpp
+  providers/src/mdns_provider.cpp
   probers/src/serial_agent_prober.cpp
   probers/src/host_bluetooth_prober.cpp
 )

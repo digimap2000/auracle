@@ -3,6 +3,8 @@
 #include "bridge_server.h"
 #include "wifi_manager.h"
 
+#include <stdio.h>
+
 #include "esp_log.h"
 #include "nvs_flash.h"
 #include "mdns.h"
@@ -25,17 +27,45 @@ static esp_err_t init_nvs(void)
 static esp_err_t init_mdns(void)
 {
     esp_err_t err = mdns_init();
+    char port_str[8];
+    mdns_txt_item_t txt[] = {
+        { .key = "name", .value = CONFIG_AURACLE_MDNS_INSTANCE_NAME },
+        { .key = "role", .value = "uart_wifi_bridge" },
+        { .key = "transport", .value = "tcp" },
+        { .key = "protocol", .value = "jsonl" },
+        { .key = "port", .value = port_str },
+    };
+
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "mDNS init failed: %s", esp_err_to_name(err));
         return err;
     }
 
-    mdns_hostname_set(CONFIG_AURACLE_MDNS_HOSTNAME);
-    mdns_instance_name_set("Auracle Bridge");
-    mdns_service_add(NULL, "_auracle", "_tcp", CONFIG_AURACLE_BRIDGE_TCP_PORT, NULL, 0);
+    snprintf(port_str, sizeof(port_str), "%d", CONFIG_AURACLE_BRIDGE_TCP_PORT);
 
-    ESP_LOGI(TAG, "mDNS: %s.local  service=_auracle._tcp  port=%d",
-             CONFIG_AURACLE_MDNS_HOSTNAME, CONFIG_AURACLE_BRIDGE_TCP_PORT);
+    err = mdns_hostname_set(CONFIG_AURACLE_MDNS_HOSTNAME);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "mDNS hostname set failed: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    err = mdns_instance_name_set(CONFIG_AURACLE_MDNS_INSTANCE_NAME);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "mDNS instance name set failed: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    err = mdns_service_add(CONFIG_AURACLE_MDNS_INSTANCE_NAME, "_auracle", "_tcp",
+                           CONFIG_AURACLE_BRIDGE_TCP_PORT, txt, sizeof(txt) / sizeof(txt[0]));
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "mDNS service add failed: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    ESP_LOGI(TAG, "mDNS: %s.local  service=%s._auracle._tcp  port=%d",
+             CONFIG_AURACLE_MDNS_HOSTNAME,
+             CONFIG_AURACLE_MDNS_INSTANCE_NAME,
+             CONFIG_AURACLE_BRIDGE_TCP_PORT);
     return ESP_OK;
 }
 

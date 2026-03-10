@@ -2,11 +2,13 @@
 #include <inventory/probe_scheduler.hpp>
 #include <inventory/probers/host_bluetooth_prober.hpp>
 #include <inventory/providers/host_bluetooth_provider.hpp>
+#include <inventory/providers/mdns_provider.hpp>
 #include <inventory/providers/serial_provider.hpp>
 #include <rpc/inventory_service.hpp>
 
 #include <dts/bluetooth.hpp>
 #include <dts/log.hpp>
+#include <dts/mdns.hpp>
 #include <dts/serial.hpp>
 
 #include <grpcpp/grpcpp.h>
@@ -49,6 +51,10 @@ int main(int /*argc*/, char* /*argv*/[]) {
     dts::bluetooth::monitor bt_monitor;
     auracle::inventory::HostBluetoothCandidateProvider bt_provider(bt_monitor, registry);
 
+    // mDNS provider
+    dts::mdns::monitor mdns_monitor(dts::mdns::browse_query{.service_type = "_auracle._tcp"});
+    auracle::inventory::MdnsCandidateProvider mdns_provider(mdns_monitor, registry);
+
     // Probe scheduler
     auracle::inventory::ProbeScheduler probe_scheduler(registry);
     probe_scheduler.add_prober(
@@ -60,6 +66,8 @@ int main(int /*argc*/, char* /*argv*/[]) {
     serial_monitor.start(dts::serial::start_options{.emit_initial_snapshot = true});
     bt_provider.start();
     bt_monitor.start(dts::bluetooth::start_options{.emit_initial_snapshot = true});
+    mdns_provider.start();
+    mdns_monitor.start();
     probe_scheduler.start();
 
     // --- gRPC server ---
@@ -82,6 +90,8 @@ int main(int /*argc*/, char* /*argv*/[]) {
 
     server->Shutdown(std::chrono::system_clock::now() + std::chrono::seconds(2));
     probe_scheduler.stop();
+    mdns_monitor.stop();
+    mdns_provider.stop();
     bt_monitor.stop();
     bt_provider.stop();
     serial_monitor.stop();

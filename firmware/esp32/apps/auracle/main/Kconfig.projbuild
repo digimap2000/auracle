@@ -78,6 +78,17 @@ menu "Auracle Bridge Configuration"
 
     endmenu
 
+    menu "mDNS"
+
+        config AURACLE_MDNS_INSTANCE_NAME
+            string "mDNS service instance name"
+            default "Auracle Bridge"
+            help
+                Human-readable mDNS service instance name advertised for
+                the raw TCP bridge.
+
+    endmenu
+
     config AURACLE_MDNS_HOSTNAME
         string "mDNS hostname"
         default "auracle"
