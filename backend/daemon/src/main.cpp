@@ -1,6 +1,7 @@
 #include <inventory/inventory.hpp>
 #include <inventory/probe_scheduler.hpp>
 #include <inventory/probers/host_bluetooth_prober.hpp>
+#include <inventory/probers/mdns_agent_prober.hpp>
 #include <inventory/providers/host_bluetooth_provider.hpp>
 #include <inventory/providers/mdns_provider.hpp>
 #include <inventory/providers/serial_provider.hpp>
@@ -60,6 +61,9 @@ int main(int /*argc*/, char* /*argv*/[]) {
     probe_scheduler.add_prober(
         auracle::inventory::Transport::HostBluetooth,
         std::make_unique<auracle::inventory::HostBluetoothProber>());
+    probe_scheduler.add_prober(
+        auracle::inventory::Transport::Mdns,
+        std::make_unique<auracle::inventory::MdnsAgentProber>());
 
     // Start everything
     serial_provider.start();

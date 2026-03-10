@@ -71,6 +71,11 @@ void ProbeScheduler::reprobe_loop(std::stop_token stop) {
             if (stop.stop_requested()) {
                 break;
             }
+            // mDNS candidates are probed once on discovery; mDNS departure
+            // handles offline. No periodic reprobe needed.
+            if (candidate.transport == Transport::Mdns) {
+                continue;
+            }
             probe_candidate(candidate);
         }
     }

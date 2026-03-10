@@ -6,6 +6,7 @@ add_library(auracle_inventory
   providers/src/mdns_provider.cpp
   probers/src/serial_agent_prober.cpp
   probers/src/host_bluetooth_prober.cpp
+  probers/src/mdns_agent_prober.cpp
 )
 
 target_include_directories(auracle_inventory

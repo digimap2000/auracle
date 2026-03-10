@@ -36,6 +36,8 @@ void InventoryRegistry::upsert_candidate(const HardwareCandidate& candidate) {
 }
 
 void InventoryRegistry::mark_candidate_gone(const CandidateId& id) {
+    std::optional<UnitId> removed_unit;
+
     {
         std::scoped_lock lock(mutex_);
         auto it = candidates_.find(id);
@@ -43,9 +45,20 @@ void InventoryRegistry::mark_candidate_gone(const CandidateId& id) {
             return;
         }
         it->second.present = false;
+
+        // Remove the bound unit entirely.
+        UnitId unit_id{id.value};
+        auto unit_it = units_.find(unit_id);
+        if (unit_it != units_.end()) {
+            removed_unit = unit_id;
+            units_.erase(unit_it);
+        }
     }
 
     on_event.emit(CandidateGone{id});
+    if (removed_unit) {
+        on_event.emit(UnitRemoved{*removed_unit});
+    }
 }
 
 void InventoryRegistry::submit_probe_result(

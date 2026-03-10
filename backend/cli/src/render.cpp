@@ -64,6 +64,9 @@ void PrettyRenderer::render(const proto::InventoryEvent& event) {
     case proto::InventoryEvent::kUnitUpdated:
         std::cout << std::format("{}  unit~       {}\n", ts, event.unit_updated().unit().id());
         break;
+    case proto::InventoryEvent::kUnitRemoved:
+        std::cout << std::format("{}  unit-       {}\n", ts, event.unit_removed().id());
+        break;
     case proto::InventoryEvent::kUnitOnline:
         std::cout << std::format("{}  unit-online {}\n", ts, event.unit_online().id());
         break;

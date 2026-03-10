@@ -102,6 +102,7 @@ message CandidateUpdated { HardwareCandidate candidate = 1; }
 message CandidateGone { string id = 1; }
 message UnitAdded { HardwareUnit unit = 1; }
 message UnitUpdated { HardwareUnit unit = 1; }
+message UnitRemoved { string id = 1; }
 message UnitOnline { string id = 1; }
 message UnitOffline { string id = 1; }
 
@@ -121,6 +122,7 @@ message InventoryEvent {
         UnitOnline unit_online = 7;
         UnitOffline unit_offline = 8;
         ClaimChanged claim_changed = 9;
+        UnitRemoved unit_removed = 10;
     }
 }
 

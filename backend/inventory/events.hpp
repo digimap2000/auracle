@@ -29,6 +29,10 @@ struct UnitUpdated {
     HardwareUnit unit;
 };
 
+struct UnitRemoved {
+    UnitId id;
+};
+
 struct UnitOnline {
     UnitId id;
 };
@@ -48,6 +52,7 @@ using InventoryEvent = std::variant<
     CandidateGone,
     UnitAdded,
     UnitUpdated,
+    UnitRemoved,
     UnitOnline,
     UnitOffline,
     ClaimChanged

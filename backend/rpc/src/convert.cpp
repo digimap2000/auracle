@@ -115,6 +115,8 @@ void to_proto(const inventory::InventoryEvent& src, proto::InventoryEvent* dst) 
             to_proto(e.unit, dst->mutable_unit_added()->mutable_unit());
         } else if constexpr (std::is_same_v<T, inventory::UnitUpdated>) {
             to_proto(e.unit, dst->mutable_unit_updated()->mutable_unit());
+        } else if constexpr (std::is_same_v<T, inventory::UnitRemoved>) {
+            dst->mutable_unit_removed()->set_id(e.id.value);
         } else if constexpr (std::is_same_v<T, inventory::UnitOnline>) {
             dst->mutable_unit_online()->set_id(e.id.value);
         } else if constexpr (std::is_same_v<T, inventory::UnitOffline>) {
