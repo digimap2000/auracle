@@ -4,7 +4,7 @@ mod devices;
 mod error;
 mod serial;
 
-use ble::{BleScanner, BluetoothAdapter};
+use ble::BluetoothAdapter;
 use daemon::scan_bridge::DaemonScanBridge;
 use daemon::{DaemonCandidate, DaemonClient, DaemonUnit};
 use devices::ConnectedDevice;
@@ -13,19 +13,53 @@ use serial::SerialPort;
 
 #[tauri::command]
 async fn get_bluetooth_adapter() -> Result<BluetoothAdapter, AuracleError> {
-    ble::get_adapter().await
+    // Query daemon for host bluetooth adapter unit
+    let mut client = DaemonClient::connect()
+        .await
+        .map_err(AuracleError::ConnectionFailed)?;
+    let units = client
+        .list_units(false)
+        .await
+        .map_err(AuracleError::CommandFailed)?;
+
+    let bt_unit = units.into_iter().find(|u| u.kind == "host-bluetooth");
+    match bt_unit {
+        Some(unit) => Ok(BluetoothAdapter {
+            id: unit.id,
+            name: unit.product,
+            is_available: unit.present,
+        }),
+        None => Err(AuracleError::ConnectionFailed(
+            "No Bluetooth adapter found — ensure auracle-daemon is running".to_string(),
+        )),
+    }
 }
 
 #[tauri::command]
 async fn start_ble_scan(
     app: tauri::AppHandle,
-    state: tauri::State<'_, BleScanner>,
+    state: tauri::State<'_, DaemonScanBridge>,
 ) -> Result<(), AuracleError> {
-    state.start_scan(app).await
+    // Find the host bluetooth unit to scan on
+    let mut client = DaemonClient::connect()
+        .await
+        .map_err(AuracleError::ConnectionFailed)?;
+    let units = client
+        .list_units(false)
+        .await
+        .map_err(AuracleError::CommandFailed)?;
+
+    let bt_unit = units.into_iter().find(|u| u.kind == "host-bluetooth");
+    match bt_unit {
+        Some(unit) => state.start_scan(app, unit.id).await,
+        None => Err(AuracleError::ConnectionFailed(
+            "No Bluetooth adapter unit found — ensure auracle-daemon is running".to_string(),
+        )),
+    }
 }
 
 #[tauri::command]
-async fn stop_ble_scan(state: tauri::State<'_, BleScanner>) -> Result<(), AuracleError> {
+async fn stop_ble_scan(state: tauri::State<'_, DaemonScanBridge>) -> Result<(), AuracleError> {
     state.stop_scan().await
 }
 
@@ -36,7 +70,6 @@ async fn scan_serial_ports() -> Vec<SerialPort> {
 
 #[tauri::command]
 async fn connect_device(device_id: String) -> Result<(), AuracleError> {
-    // Stub: would look up device in registry and connect
     if device_id.is_empty() {
         return Err(AuracleError::DeviceNotFound(
             "No device ID provided".to_string(),
@@ -47,7 +80,6 @@ async fn connect_device(device_id: String) -> Result<(), AuracleError> {
 
 #[tauri::command]
 async fn disconnect_device(device_id: String) -> Result<(), AuracleError> {
-    // Stub: would look up device in registry and disconnect
     if device_id.is_empty() {
         return Err(AuracleError::DeviceNotFound(
             "No device ID provided".to_string(),
@@ -58,7 +90,6 @@ async fn disconnect_device(device_id: String) -> Result<(), AuracleError> {
 
 #[tauri::command]
 async fn get_connected_devices() -> Vec<ConnectedDevice> {
-    // Stub: would return actual connected devices from registry
     vec![]
 }
 
@@ -103,7 +134,6 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_process::init())
-        .manage(BleScanner::new())
         .manage(DaemonScanBridge::new())
         .setup(|app| {
             #[cfg(desktop)]

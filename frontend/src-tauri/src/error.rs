@@ -3,9 +3,6 @@ use serde::Serialize;
 #[derive(Debug, thiserror::Error)]
 #[allow(dead_code)]
 pub enum AuracleError {
-    #[error("BLE error: {0}")]
-    Ble(String),
-
     #[error("Serial error: {0}")]
     Serial(String),
 
@@ -17,12 +14,6 @@ pub enum AuracleError {
 
     #[error("Command failed: {0}")]
     CommandFailed(String),
-}
-
-impl From<btleplug::Error> for AuracleError {
-    fn from(e: btleplug::Error) -> Self {
-        AuracleError::Ble(e.to_string())
-    }
 }
 
 impl Serialize for AuracleError {
