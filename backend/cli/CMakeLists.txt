@@ -6,6 +6,7 @@ add_executable(auracle
   src/main.cpp
   src/list.cpp
   src/watch.cpp
+  src/scan.cpp
   src/render.cpp
 )
 

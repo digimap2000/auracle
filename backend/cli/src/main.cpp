@@ -1,4 +1,5 @@
 #include "list.hpp"
+#include "scan.hpp"
 #include "watch.hpp"
 
 #include <cstdlib>
@@ -24,6 +25,7 @@ void print_usage() {
         << "commands:\n"
         << "  inventory list    show current candidates and units\n"
         << "  inventory watch   stream inventory events from the daemon\n"
+        << "  scan watch <id>   stream BLE advertisements from a unit\n"
         << "\n"
         << "common options:\n"
         << "  --server <addr>   daemon address (default: 127.0.0.1:50051)\n"
@@ -37,7 +39,10 @@ void print_usage() {
         << "  --include-offline include offline units\n"
         << "\n"
         << "inventory watch options:\n"
-        << "  --initial         request initial snapshot before live events\n";
+        << "  --initial         request initial snapshot before live events\n"
+        << "\n"
+        << "scan watch options:\n"
+        << "  --no-duplicates   only report first advertisement per device\n";
 }
 
 int run_list_main(int argc, char* argv[]) {
@@ -104,6 +109,39 @@ int run_watch_main(int argc, char* argv[]) {
     return auracle::cli::run_watch(opts);
 }
 
+int run_scan_watch_main(int argc, char* argv[]) {
+    if (argc < 4) {
+        std::cerr << "usage: auracle scan watch <unit-id> [options]\n";
+        return 2;
+    }
+
+    auracle::cli::ScanOptions opts;
+    opts.unit_id = argv[3];
+
+    for (int i = 4; i < argc; ++i) {
+        const std::string_view arg{argv[i]};
+
+        if (arg == "--server" && i + 1 < argc) {
+            opts.server = argv[++i];
+        } else if (arg == "--format" && i + 1 < argc) {
+            if (!parse_format(argv[++i], opts.format)) {
+                std::cerr << "unknown format: " << argv[i] << "\n";
+                return 2;
+            }
+        } else if (arg == "--no-duplicates") {
+            opts.allow_duplicates = false;
+        } else if (arg == "--verbose") {
+            opts.verbose = true;
+        } else {
+            std::cerr << "unknown option: " << arg << "\n";
+            print_usage();
+            return 2;
+        }
+    }
+
+    return auracle::cli::run_scan(opts);
+}
+
 } // namespace
 
 int main(int argc, char* argv[]) {
@@ -115,16 +153,14 @@ int main(int argc, char* argv[]) {
     const std::string_view cmd{argv[1]};
     const std::string_view sub{argv[2]};
 
-    if (cmd != "inventory") {
-        std::cerr << "unknown command: " << cmd << "\n";
-        print_usage();
-        return 2;
+    if (cmd == "inventory") {
+        if (sub == "list")  return run_list_main(argc, argv);
+        if (sub == "watch") return run_watch_main(argc, argv);
+    } else if (cmd == "scan") {
+        if (sub == "watch") return run_scan_watch_main(argc, argv);
     }
 
-    if (sub == "list")  return run_list_main(argc, argv);
-    if (sub == "watch") return run_watch_main(argc, argv);
-
-    std::cerr << "unknown subcommand: " << sub << "\n";
+    std::cerr << "unknown command: " << cmd << " " << sub << "\n";
     print_usage();
     return 2;
 }

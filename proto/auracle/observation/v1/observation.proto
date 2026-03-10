@@ -1,0 +1,58 @@
+syntax = "proto3";
+
+package auracle.observation.v1;
+
+option cc_enable_arenas = true;
+
+// ---------------------------------------------------------------------------
+// BLE advertisement
+// ---------------------------------------------------------------------------
+
+message BleAdvertisement {
+    string device_id = 1;           // platform-stable peripheral identifier
+    string name = 2;                // local name (may be empty)
+    int32 rssi = 3;                 // received signal strength (dBm)
+    int32 tx_power = 4;             // TX power level (dBm), 127 = unknown
+    repeated string service_uuids = 5;
+    bytes manufacturer_data = 6;    // raw manufacturer-specific data (after company ID)
+    uint32 company_id = 7;          // Bluetooth SIG company identifier
+}
+
+// ---------------------------------------------------------------------------
+// Observation event
+// ---------------------------------------------------------------------------
+
+message ObservationEvent {
+    int64 timestamp_ms = 1;
+    string unit_id = 2;             // which unit produced this observation
+    oneof payload {
+        BleAdvertisement ble_advertisement = 3;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Service
+// ---------------------------------------------------------------------------
+
+message StartScanRequest {
+    string unit_id = 1;
+    bool allow_duplicates = 2;      // report every advertisement, not just first per device
+}
+
+message StartScanResponse {}
+
+message StopScanRequest {
+    string unit_id = 1;
+}
+
+message StopScanResponse {}
+
+message WatchObservationsRequest {
+    string unit_id = 1;             // empty = all units
+}
+
+service ObservationService {
+    rpc StartScan(StartScanRequest) returns (StartScanResponse);
+    rpc StopScan(StopScanRequest) returns (StopScanResponse);
+    rpc WatchObservations(WatchObservationsRequest) returns (stream ObservationEvent);
+}

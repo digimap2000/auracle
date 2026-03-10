@@ -5,7 +5,9 @@
 #include <inventory/providers/host_bluetooth_provider.hpp>
 #include <inventory/providers/mdns_provider.hpp>
 #include <inventory/providers/serial_provider.hpp>
+#include <observation/scanner_manager.hpp>
 #include <rpc/inventory_service.hpp>
+#include <rpc/observation_service.hpp>
 
 #include <dts/bluetooth.hpp>
 #include <dts/log.hpp>
@@ -20,6 +22,7 @@
 #include <cstdlib>
 #include <memory>
 #include <thread>
+#include <variant>
 
 namespace {
 
@@ -65,6 +68,27 @@ int main(int /*argc*/, char* /*argv*/[]) {
         auracle::inventory::Transport::Mdns,
         std::make_unique<auracle::inventory::MdnsAgentProber>());
 
+    // --- observation layer ---
+    auracle::observation::ScannerManager scanner_manager(registry);
+
+    // When a HostBluetoothAdapter unit is promoted, bind a scanner to it.
+    // When it is removed, unbind.
+    auto unit_event_conn = registry.on_event.connect(
+        [&scanner_manager](const auracle::inventory::InventoryEvent& event) {
+            std::visit([&scanner_manager](const auto& e) {
+                using T = std::decay_t<decltype(e)>;
+                if constexpr (std::is_same_v<T, auracle::inventory::UnitAdded>) {
+                    if (e.unit.kind == auracle::inventory::HardwareKind::HostBluetoothAdapter) {
+                        scanner_manager.bind_scanner(
+                            e.unit.id.value,
+                            std::make_unique<dts::bluetooth::scanner>());
+                    }
+                } else if constexpr (std::is_same_v<T, auracle::inventory::UnitRemoved>) {
+                    scanner_manager.unbind_scanner(e.id.value);
+                }
+            }, event);
+        });
+
     // Start everything
     serial_provider.start();
     serial_monitor.start(dts::serial::start_options{.emit_initial_snapshot = true});
@@ -76,11 +100,13 @@ int main(int /*argc*/, char* /*argv*/[]) {
 
     // --- gRPC server ---
     auracle::rpc::InventoryServiceImpl inventory_svc(registry);
+    auracle::rpc::ObservationServiceImpl observation_svc(scanner_manager);
 
     const std::string listen_addr = "0.0.0.0:50051";
     grpc::ServerBuilder builder;
     builder.AddListeningPort(listen_addr, grpc::InsecureServerCredentials());
     builder.RegisterService(&inventory_svc);
+    builder.RegisterService(&observation_svc);
 
     auto server = builder.BuildAndStart();
     dts::log::info(log_tag, "gRPC server listening on {}", listen_addr);
@@ -93,6 +119,7 @@ int main(int /*argc*/, char* /*argv*/[]) {
     dts::log::info(log_tag, "shutting down");
 
     server->Shutdown(std::chrono::system_clock::now() + std::chrono::seconds(2));
+    unit_event_conn.disconnect();
     probe_scheduler.stop();
     mdns_monitor.stop();
     mdns_provider.stop();
