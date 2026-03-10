@@ -136,6 +136,24 @@ message WatchRequest {
     bool include_units = 3;
 }
 
+message ListCandidatesRequest {
+    bool include_gone = 1;
+}
+
+message ListCandidatesResponse {
+    repeated HardwareCandidate candidates = 1;
+}
+
+message ListUnitsRequest {
+    bool include_offline = 1;
+}
+
+message ListUnitsResponse {
+    repeated HardwareUnit units = 1;
+}
+
 service InventoryService {
     rpc Watch(WatchRequest) returns (stream InventoryEvent);
+    rpc ListCandidates(ListCandidatesRequest) returns (ListCandidatesResponse);
+    rpc ListUnits(ListUnitsRequest) returns (ListUnitsResponse);
 }

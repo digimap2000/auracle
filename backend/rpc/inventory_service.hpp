@@ -19,6 +19,16 @@ public:
         const proto::WatchRequest* request,
         grpc::ServerWriter<proto::InventoryEvent>* writer) override;
 
+    grpc::Status ListCandidates(
+        grpc::ServerContext* context,
+        const proto::ListCandidatesRequest* request,
+        proto::ListCandidatesResponse* response) override;
+
+    grpc::Status ListUnits(
+        grpc::ServerContext* context,
+        const proto::ListUnitsRequest* request,
+        proto::ListUnitsResponse* response) override;
+
 private:
     inventory::InventoryRegistry& registry_;
 };

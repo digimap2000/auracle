@@ -4,6 +4,7 @@ endif()
 
 add_executable(auracle
   src/main.cpp
+  src/list.cpp
   src/watch.cpp
   src/render.cpp
 )

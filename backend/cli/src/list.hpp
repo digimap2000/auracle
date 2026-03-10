@@ -6,15 +6,16 @@
 
 namespace auracle::cli {
 
-struct WatchOptions {
+struct ListOptions {
     std::string server = "127.0.0.1:50051";
-    bool initial = false;
     OutputFormat format = OutputFormat::Pretty;
     bool include_candidates = true;
     bool include_units = true;
+    bool include_gone = false;
+    bool include_offline = false;
     bool verbose = false;
 };
 
-[[nodiscard]] int run_watch(const WatchOptions& opts);
+[[nodiscard]] int run_list(const ListOptions& opts);
 
 } // namespace auracle::cli

@@ -82,4 +82,26 @@ grpc::Status InventoryServiceImpl::Watch(
     return grpc::Status::OK;
 }
 
+grpc::Status InventoryServiceImpl::ListCandidates(
+    grpc::ServerContext* /*context*/,
+    const proto::ListCandidatesRequest* request,
+    proto::ListCandidatesResponse* response) {
+
+    for (const auto& candidate : registry_.list_candidates(request->include_gone())) {
+        to_proto(candidate, response->add_candidates());
+    }
+    return grpc::Status::OK;
+}
+
+grpc::Status InventoryServiceImpl::ListUnits(
+    grpc::ServerContext* /*context*/,
+    const proto::ListUnitsRequest* request,
+    proto::ListUnitsResponse* response) {
+
+    for (const auto& unit : registry_.list_units(request->include_offline())) {
+        to_proto(unit, response->add_units());
+    }
+    return grpc::Status::OK;
+}
+
 } // namespace auracle::rpc
