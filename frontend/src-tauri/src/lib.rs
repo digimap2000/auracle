@@ -1,9 +1,11 @@
 mod ble;
+mod daemon;
 mod devices;
 mod error;
 mod serial;
 
 use ble::{BleScanner, BluetoothAdapter};
+use daemon::{DaemonCandidate, DaemonClient, DaemonUnit};
 use devices::ConnectedDevice;
 use error::AuracleError;
 use serial::SerialPort;
@@ -59,6 +61,28 @@ async fn get_connected_devices() -> Vec<ConnectedDevice> {
     vec![]
 }
 
+#[tauri::command]
+async fn get_daemon_units() -> Result<Vec<DaemonUnit>, AuracleError> {
+    let mut client = DaemonClient::connect()
+        .await
+        .map_err(AuracleError::CommandFailed)?;
+    client
+        .list_units(false)
+        .await
+        .map_err(AuracleError::CommandFailed)
+}
+
+#[tauri::command]
+async fn get_daemon_candidates() -> Result<Vec<DaemonCandidate>, AuracleError> {
+    let mut client = DaemonClient::connect()
+        .await
+        .map_err(AuracleError::CommandFailed)?;
+    client
+        .list_candidates(false)
+        .await
+        .map_err(AuracleError::CommandFailed)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -76,6 +100,8 @@ pub fn run() {
             disconnect_device,
             get_bluetooth_adapter,
             get_connected_devices,
+            get_daemon_candidates,
+            get_daemon_units,
             scan_serial_ports,
             start_ble_scan,
             stop_ble_scan,
