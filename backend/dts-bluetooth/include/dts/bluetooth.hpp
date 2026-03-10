@@ -2,6 +2,7 @@
 
 #include <dts/signal.hpp>
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <system_error>
@@ -130,6 +131,81 @@ private:
     std::shared_ptr<impl> impl_;
 };
 
+// ---------------------------------------------------------------------------
+// BLE peripheral scanner
+// ---------------------------------------------------------------------------
+
+struct advertisement final {
+    std::string device_id;                         // platform-stable peripheral identifier
+    std::string name;                              // local name (may be empty)
+    std::int32_t rssi{0};                          // received signal strength (dBm)
+    std::int32_t tx_power{127};                    // TX power level (dBm), 127 = unknown
+    std::vector<std::string> service_uuids;        // advertised service UUIDs
+    std::vector<std::uint8_t> manufacturer_data;   // raw manufacturer-specific data
+    std::uint16_t company_id{0};                   // company identifier from manufacturer data
+};
+
+struct scan_options final {
+    bool allow_duplicates{true};  // report every advertisement, not just first per device
+};
+
+class scanner final {
+public:
+    scanner();
+    ~scanner() noexcept;
+
+    scanner(const scanner&) = delete;
+    scanner& operator=(const scanner&) = delete;
+    scanner(scanner&&) noexcept;
+    scanner& operator=(scanner&&) noexcept;
+
+    void start(scan_options opts = {});
+    void stop() noexcept;
+    [[nodiscard]] bool scanning() const noexcept;
+
+    // --- on_advertisement -----------------------------------------------------
+
+    template <typename Fn>
+    requires std::is_invocable_r_v<void, Fn&, advertisement const&>
+    [[nodiscard]] dts::connection on_advertisement(Fn&& slot) {
+        if (!advertisement_) { return {}; }
+        auto handler = std::make_shared<std::decay_t<Fn>>(std::forward<Fn>(slot));
+        return advertisement_->connect([handler](advertisement const& adv) {
+            std::invoke(*handler, adv);
+        });
+    }
+
+    template <typename Fn>
+    requires std::is_invocable_r_v<void, Fn&, advertisement const&>
+    [[nodiscard]] dts::scoped_connection on_advertisement_scoped(Fn&& slot) {
+        return dts::scoped_connection{on_advertisement(std::forward<Fn>(slot))};
+    }
+
+    // --- on_error -------------------------------------------------------------
+
+    template <typename Fn>
+    requires std::is_invocable_r_v<void, Fn&, monitor_error const&>
+    [[nodiscard]] dts::connection on_error(Fn&& slot) {
+        if (!error_) { return {}; }
+        auto handler = std::make_shared<std::decay_t<Fn>>(std::forward<Fn>(slot));
+        return error_->connect([handler](monitor_error const& err) {
+            std::invoke(*handler, err);
+        });
+    }
+
+    template <typename Fn>
+    requires std::is_invocable_r_v<void, Fn&, monitor_error const&>
+    [[nodiscard]] dts::scoped_connection on_error_scoped(Fn&& slot) {
+        return dts::scoped_connection{on_error(std::forward<Fn>(slot))};
+    }
+
+private:
+    struct impl;
+    std::shared_ptr<dts::signal<void(advertisement const&)>>  advertisement_{std::make_shared<dts::signal<void(advertisement const&)>>()};
+    std::shared_ptr<dts::signal<void(monitor_error const&)>>  error_{std::make_shared<dts::signal<void(monitor_error const&)>>()};
+    std::shared_ptr<impl> impl_;
+};
+
 // Contract:
 // - Public API hides backend/library types; no OS-specific headers exposed.
 // - enumerate_adapters() is thread-safe.
@@ -143,5 +219,9 @@ private:
 //   callables are accepted.
 // - on_changed fires when an existing adapter's mutable state changes
 //   (powered, name, address) but the adapter remains present.
+// - scanner start/stop are thread-safe and idempotent.
+// - scanner::scanning() is thread-safe.
+// - scanner emits on_advertisement from a platform dispatch queue thread.
+// - scanner shutdown is safe; destroying scanner stops scanning.
 
 } // namespace dts::bluetooth
