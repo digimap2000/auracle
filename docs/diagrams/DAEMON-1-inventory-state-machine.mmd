@@ -1,0 +1,41 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#e8f4fd', 'primaryBorderColor': '#0070f3', 'primaryTextColor': '#1a1a1a', 'lineColor': '#64748b', 'fontSize': '14px'}}}%%
+stateDiagram-v2
+    direction TB
+
+    state "Providers" as providers {
+        direction LR
+        [*] --> Serial : USB device arrived
+        [*] --> HostBT : BLE adapter detected
+        [*] --> mDNS : Service discovered
+    }
+
+    state "Candidate" as candidate
+    state "Probing" as probing
+    state "Unit" as unit
+    state "Removed" as removed
+
+    state probing {
+        direction LR
+        [*] --> HostBTProber : BLE candidate
+        [*] --> MdnsProber : mDNS candidate
+    }
+
+    providers --> candidate : upsert_candidate()
+    candidate --> probing : ProbeScheduler assigns prober
+    probing --> unit : ProbeResult = Supported
+    probing --> candidate : ProbeResult = Unsupported\n(reprobe after 10s)
+    candidate --> removed : Candidate gone + TTL expired
+    unit --> removed : Unit offline + TTL expired
+    unit --> unit : Identity updated\nOnline ↔ Offline
+
+    note right of unit
+        Confirmed device with:
+        vendor, product, serial,
+        firmware version
+    end note
+
+    note right of candidate
+        Raw detection:
+        port, address, or
+        service name
+    end note

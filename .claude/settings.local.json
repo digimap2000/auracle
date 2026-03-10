@@ -15,7 +15,12 @@
       "mcp__shadcn__get_item_examples_from_registries",
       "mcp__mcp-registry__search_mcp_registry",
       "mcp__mcp-atlassian__confluence_create_page",
-      "mcp__mcp-atlassian__confluence_search"
+      "mcp__mcp-atlassian__confluence_search",
+      "mcp__naim-atlassian__getAccessibleAtlassianResources",
+      "mcp__naim-atlassian__getConfluenceSpaces",
+      "mcp__naim-atlassian__createConfluencePage",
+      "mcp__naim-atlassian__updateConfluencePage",
+      "mcp__naim-atlassian__getConfluencePage"
     ]
   }
 }

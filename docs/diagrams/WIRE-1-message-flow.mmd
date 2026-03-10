@@ -1,0 +1,35 @@
+%%{init: {'theme': 'base', 'themeVariables': {'actorBkg': '#e8f4fd', 'actorBorder': '#0070f3', 'actorTextColor': '#1a1a1a', 'signalColor': '#64748b', 'signalTextColor': '#1a1a1a', 'labelBoxBkgColor': '#f8fafc', 'noteBkgColor': '#fef3c7', 'noteBorderColor': '#f59e0b', 'fontSize': '14px'}}}%%
+sequenceDiagram
+    participant Host as Desktop Host
+    participant FW as nRF5340 Firmware
+
+    Note over Host,FW: USB CDC ACM connected
+
+    FW->>Host: {"type":"hello", "firmware":"auracle-fw",<br/>"version":"0.1.0", "role":"sink"}
+
+    Host->>FW: {"type":"cmd", "action":"tap_enable", "tap":"adv"}
+    Host->>FW: {"type":"cmd", "action":"tap_enable", "tap":"sync"}
+    Host->>FW: {"type":"cmd", "action":"tap_enable", "tap":"bis"}
+
+    Host->>FW: {"type":"cmd", "action":"scan_start"}
+
+    Note over FW: Scanning for BLE advertisements...
+
+    FW->>Host: {"type":"adv", "ts":1200, "addr":"24:5D:FC:...",<br/>"rssi":-67, "data":"0201061bff..."}
+    FW->>Host: {"type":"adv", ...}
+    FW->>Host: {"type":"adv", ...}
+
+    Host->>FW: {"type":"cmd", "action":"set_target",<br/>"broadcast_id":"0x223344"}
+
+    Note over FW: Syncing to broadcast 0x223344...
+
+    FW->>Host: {"type":"sync", "state":"synced",<br/>"broadcast_id":"0x223344", "addr":"24:5D:FC:..."}
+
+    FW->>Host: {"type":"bis", "state":"streaming",<br/>"broadcast_id":"0x223344", "bis_index":1}
+
+    Note over Host,FW: Audio streaming active
+
+    FW->>Host: {"type":"log", "level":"inf",<br/>"module":"audio", "msg":"stream stable"}
+
+    Host->>FW: {"type":"cmd", "action":"tap_disable", "tap":"adv"}
+    Host->>FW: {"type":"cmd", "action":"scan_stop"}

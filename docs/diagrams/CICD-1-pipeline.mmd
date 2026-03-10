@@ -1,0 +1,31 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#e8f4fd', 'primaryBorderColor': '#0070f3', 'primaryTextColor': '#1a1a1a', 'secondaryColor': '#f0fdf4', 'tertiaryColor': '#fef3c7', 'lineColor': '#64748b', 'fontSize': '14px'}}}%%
+flowchart LR
+    Tag["Git Tag Push<br/><b>v*</b>"]
+
+    subgraph GHA["GitHub Actions"]
+        direction TB
+        Build_ARM["Build<br/><b>arm64</b><br/><i>aarch64-apple-darwin</i>"]
+        Build_x86["Build<br/><b>x86_64</b><br/><i>x86_64-apple-darwin</i>"]
+    end
+
+    Sign["Sign<br/><i>Ed25519</i>"]
+
+    subgraph Release["Draft Release"]
+        direction TB
+        DMG[".dmg<br/><i>Disk image</i>"]
+        TarGz[".app.tar.gz<br/><i>App bundle</i>"]
+        Sig[".app.tar.gz.sig<br/><i>Signature</i>"]
+        Manifest["latest.json<br/><i>Updater manifest</i>"]
+    end
+
+    Updater["Auto-Updater<br/><i>Tauri plugin</i>"]
+
+    Tag --> Build_ARM
+    Tag --> Build_x86
+    Build_ARM --> Sign
+    Build_x86 --> Sign
+    Sign --> DMG
+    Sign --> TarGz
+    Sign --> Sig
+    Sign --> Manifest
+    Manifest --> Updater

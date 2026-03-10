@@ -1,0 +1,27 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#e8f4fd', 'primaryBorderColor': '#0070f3', 'primaryTextColor': '#1a1a1a', 'secondaryColor': '#f0fdf4', 'tertiaryColor': '#fef3c7', 'lineColor': '#64748b', 'fontSize': '14px'}}}%%
+flowchart TB
+    subgraph Planning["Cowork — Planning AI"]
+        Plan["Feature Planning<br/><i>Architecture decisions</i>"]
+        Spec["Write Spec<br/><i>docs/features/NNN-*.md</i>"]
+        Prompt["Write Prompt<br/><i>docs/features/NNN-prompt.md</i>"]
+        Review["Code Review<br/><i>Issue triage</i>"]
+        Refine["Refinement<br/><i>Skill gap · Spec gap · Bug</i>"]
+    end
+
+    subgraph Implementation["Claude Code — Implementation AI"]
+        Read["Read Specs + Skills<br/><i>CLAUDE.md · .skills/</i>"]
+        Code["Implement Feature<br/><i>Rust + TypeScript</i>"]
+        Check["Build Checks<br/><i>cargo build · tsc</i>"]
+    end
+
+    Docs[("docs/ folder<br/><i>Source of truth</i>")]
+
+    Plan --> Spec
+    Spec --> Docs
+    Docs --> Prompt
+    Prompt --> Read
+    Read --> Code
+    Code --> Check
+    Check --> Review
+    Review --> Refine
+    Refine --> Prompt

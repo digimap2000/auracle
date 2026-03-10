@@ -1,0 +1,30 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#1e293b', 'primaryBorderColor': '#334155', 'primaryTextColor': '#f8fafc', 'secondaryColor': '#0f172a', 'tertiaryColor': '#1e293b', 'lineColor': '#475569', 'fontSize': '13px'}}}%%
+block-beta
+    columns 5
+
+    block:rail:1
+        columns 1
+        space
+        A["🔵 Home"]
+        B["🔍 Browse"]
+        C["📻 Generate"]
+        D["📋 Compliance"]
+        space
+    end
+
+    block:main:4
+        columns 1
+        Header["Header — Page title + toolbar"]
+        Content["Main Content Area<br/><br/><i>Page-specific content renders here</i><br/><i>Scrollable · Full height</i>"]
+        StatusBar["Status Bar — Adapter · Connection · Update"]
+    end
+
+    style rail fill:#0f172a,stroke:#334155,color:#94a3b8
+    style main fill:#1e293b,stroke:#334155
+    style Header fill:#1e293b,stroke:#334155,color:#e2e8f0
+    style Content fill:#09090b,stroke:#27272a,color:#a1a1aa
+    style StatusBar fill:#0f172a,stroke:#334155,color:#94a3b8
+    style A fill:#1e293b,stroke:#334155,color:#e2e8f0
+    style B fill:#1e293b,stroke:#334155,color:#e2e8f0
+    style C fill:#1e293b,stroke:#334155,color:#e2e8f0
+    style D fill:#1e293b,stroke:#334155,color:#e2e8f0

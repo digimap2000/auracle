@@ -1,0 +1,42 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#e8f4fd', 'primaryBorderColor': '#0070f3', 'primaryTextColor': '#1a1a1a', 'secondaryColor': '#f0fdf4', 'tertiaryColor': '#fef3c7', 'lineColor': '#64748b', 'fontSize': '14px'}}}%%
+flowchart LR
+    subgraph Radio["Radio"]
+        BLE_ADV["BLE<br/>Advertisements"]
+    end
+
+    subgraph Path1["Path 1 — Direct BLE"]
+        btleplug["btleplug<br/><i>Rust</i>"]
+        Scanner["BLE Scanner<br/><i>BleScanner state</i>"]
+    end
+
+    subgraph Path2["Path 2 — Firmware Serial"]
+        nRF["nRF5340<br/><i>USB CDC ACM</i>"]
+        WireParser["Wire Protocol<br/><i>NDJSON Parser</i>"]
+    end
+
+    subgraph DaemonSvc["Backend Daemon"]
+        Inventory["Inventory<br/>Registry"]
+        gRPCSvc["gRPC<br/>Service"]
+    end
+
+    subgraph TauriApp["Tauri App"]
+        RustBE["Rust Backend<br/><i>Commands + Events</i>"]
+    end
+
+    subgraph UI["React Frontend"]
+        Hooks["Hooks<br/><i>useDevices</i>"]
+        Pages["Pages<br/><i>Home · Devices</i>"]
+    end
+
+    BLE_ADV -->|"BLE"| btleplug
+    btleplug --> Scanner
+    Scanner -->|"ble-devices-updated<br/><i>Tauri event</i>"| RustBE
+
+    BLE_ADV -->|"BLE ISO"| nRF
+    nRF -->|"NDJSON<br/>/dev/tty.*"| WireParser
+    WireParser --> Inventory
+    Inventory --> gRPCSvc
+    gRPCSvc -->|"gRPC stream<br/>Watch RPC"| RustBE
+
+    RustBE -->|"Tauri IPC"| Hooks
+    Hooks --> Pages

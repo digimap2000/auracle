@@ -1,0 +1,33 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#e8f4fd', 'primaryBorderColor': '#0070f3', 'primaryTextColor': '#1a1a1a', 'secondaryColor': '#f0fdf4', 'tertiaryColor': '#fef3c7', 'lineColor': '#64748b', 'fontSize': '14px'}}}%%
+graph TB
+    subgraph Desktop["Desktop Application"]
+        direction LR
+        Tauri["Tauri 2<br/><i>Rust</i>"]
+        React["React 18<br/><i>TypeScript</i>"]
+    end
+
+    subgraph Daemon["Backend Daemon"]
+        gRPC["C++ gRPC Server<br/><i>Inventory Registry</i>"]
+    end
+
+    subgraph Firmware["Firmware"]
+        direction LR
+        nRF["nRF5340<br/><i>Sink / Source</i>"]
+        ESP["ESP32<br/><i>TCP Bridge</i>"]
+    end
+
+    BT["Bluetooth Adapter<br/><i>btleplug</i>"]
+
+    subgraph Targets["Target Devices"]
+        direction LR
+        Muso["Muso 3"]
+        Bathys["Bathys V2"]
+    end
+
+    React <-->|"Tauri IPC"| Tauri
+    Tauri <-->|"gRPC"| gRPC
+    gRPC <-->|"NDJSON / Serial"| nRF
+    gRPC <-->|"TCP"| ESP
+    Tauri <--> BT
+    nRF <-->|"BLE ISO"| Targets
+    BT <-->|"BLE"| Targets

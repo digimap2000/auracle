@@ -1,0 +1,40 @@
+%%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#e8f4fd', 'primaryBorderColor': '#0070f3', 'primaryTextColor': '#1a1a1a', 'secondaryColor': '#f0fdf4', 'tertiaryColor': '#fef3c7', 'lineColor': '#64748b', 'fontSize': '14px'}}}%%
+graph TB
+    subgraph AppLayer["Desktop App Layer"]
+        direction LR
+        ReactApp["React 18<br/><i>Pages · Hooks · Components</i>"]
+        TauriBackend["Tauri 2 · Rust<br/><i>Commands · Events · BLE</i>"]
+        ReactApp <-->|"Commands /<br/>Events"| TauriBackend
+    end
+
+    subgraph DaemonLayer["Backend Daemon Layer"]
+        direction LR
+        gRPCServer["gRPC Server<br/><i>InventoryService</i>"]
+        Registry["Inventory Registry<br/><i>State Machine</i>"]
+        Providers["Providers<br/><i>Serial · BT · mDNS</i>"]
+        Probers["Probers<br/><i>BT · mDNS Agent</i>"]
+        gRPCServer --- Registry
+        Registry --- Providers
+        Registry --- Probers
+    end
+
+    subgraph FWLayer["Firmware Layer"]
+        direction LR
+        nRF5340["nRF5340 Audio DK<br/><i>Broadcast Sink / Source</i>"]
+        ESP32["ESP32<br/><i>Raw TCP UART Bridge</i>"]
+    end
+
+    subgraph External["External Devices"]
+        direction LR
+        Muso3["Muso 3"]
+        BathysV2["Bathys V2"]
+    end
+
+    BLE["BLE Radio<br/><i>btleplug</i>"]
+
+    TauriBackend <-->|"gRPC<br/>localhost:50051"| gRPCServer
+    Providers <-->|"NDJSON<br/>USB CDC ACM"| nRF5340
+    Providers <-->|"TCP"| ESP32
+    TauriBackend <--> BLE
+    nRF5340 <-->|"BLE ISO"| External
+    BLE <-->|"BLE"| External

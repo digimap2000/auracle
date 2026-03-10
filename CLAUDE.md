@@ -53,6 +53,7 @@ Project-specific skills live in `.skills/`. Read the relevant skill before start
 | auracle-frontend | `.skills/auracle-frontend/SKILL.md` | Writing or modifying React/TypeScript code |
 | auracle-devices | `.skills/auracle-devices/SKILL.md` | Working on hardware communication (BLE, serial, devices) |
 | auracle-spec | `.skills/auracle-spec/SKILL.md` | Planning features, checking spec compliance |
+| auracle-docs | `.skills/auracle-docs/SKILL.md` | Updating Confluence documentation after development cycles |
 
 **Read the appropriate skill(s) before writing code.** Most tasks require at least two skills (e.g., a backend change needs both auracle-rust and auracle-devices).
 
