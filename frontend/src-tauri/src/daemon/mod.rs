@@ -1,3 +1,5 @@
+pub mod scan_bridge;
+
 pub mod proto {
     pub mod inventory {
         tonic::include_proto!("auracle.inventory.v1");

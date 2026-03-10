@@ -5,6 +5,7 @@ mod error;
 mod serial;
 
 use ble::{BleScanner, BluetoothAdapter};
+use daemon::scan_bridge::DaemonScanBridge;
 use daemon::{DaemonCandidate, DaemonClient, DaemonUnit};
 use devices::ConnectedDevice;
 use error::AuracleError;
@@ -73,6 +74,20 @@ async fn get_daemon_units() -> Result<Vec<DaemonUnit>, AuracleError> {
 }
 
 #[tauri::command]
+async fn start_daemon_scan(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, DaemonScanBridge>,
+    unit_id: String,
+) -> Result<(), AuracleError> {
+    state.start_scan(app, unit_id).await
+}
+
+#[tauri::command]
+async fn stop_daemon_scan(state: tauri::State<'_, DaemonScanBridge>) -> Result<(), AuracleError> {
+    state.stop_scan().await
+}
+
+#[tauri::command]
 async fn get_daemon_candidates() -> Result<Vec<DaemonCandidate>, AuracleError> {
     let mut client = DaemonClient::connect()
         .await
@@ -89,6 +104,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_process::init())
         .manage(BleScanner::new())
+        .manage(DaemonScanBridge::new())
         .setup(|app| {
             #[cfg(desktop)]
             app.handle()
@@ -104,7 +120,9 @@ pub fn run() {
             get_daemon_units,
             scan_serial_ports,
             start_ble_scan,
+            start_daemon_scan,
             stop_ble_scan,
+            stop_daemon_scan,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Auracle");
