@@ -45,6 +45,7 @@ ProbeResult HostBluetoothProber::probe(const HardwareCandidate& candidate) {
             .firmware_version = {},
         },
         .present = it->powered,
+        .capabilities = {Capability::BleScan},
     };
 }
 

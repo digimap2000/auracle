@@ -30,6 +30,16 @@ namespace {
     return proto::HARDWARE_KIND_UNSPECIFIED;
 }
 
+[[nodiscard]] proto::Capability to_proto_capability(inventory::Capability c) {
+    switch (c) {
+    case inventory::Capability::BleScan:        return proto::CAPABILITY_BLE_SCAN;
+    case inventory::Capability::LeAudioSink:    return proto::CAPABILITY_LE_AUDIO_SINK;
+    case inventory::Capability::LeAudioSource:  return proto::CAPABILITY_LE_AUDIO_SOURCE;
+    case inventory::Capability::UnicastClient:  return proto::CAPABILITY_UNICAST_CLIENT;
+    }
+    return proto::CAPABILITY_UNSPECIFIED;
+}
+
 } // namespace
 
 void to_proto(const inventory::SerialDetails& src, proto::SerialDetails* dst) {
@@ -97,6 +107,9 @@ void to_proto(const inventory::HardwareUnit& src, proto::HardwareUnit* dst) {
     to_proto(src.identity, dst->mutable_identity());
     if (src.lease.has_value()) {
         to_proto(*src.lease, dst->mutable_lease());
+    }
+    for (const auto& cap : src.capabilities) {
+        dst->add_capabilities(to_proto_capability(cap));
     }
 }
 

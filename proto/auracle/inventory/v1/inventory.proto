@@ -21,6 +21,14 @@ enum HardwareKind {
     HARDWARE_KIND_HOST_BLUETOOTH_ADAPTER = 2;
 }
 
+enum Capability {
+    CAPABILITY_UNSPECIFIED = 0;
+    CAPABILITY_BLE_SCAN = 1;
+    CAPABILITY_LE_AUDIO_SINK = 2;
+    CAPABILITY_LE_AUDIO_SOURCE = 3;
+    CAPABILITY_UNICAST_CLIENT = 4;
+}
+
 // ---------------------------------------------------------------------------
 // Detail messages
 // ---------------------------------------------------------------------------
@@ -91,6 +99,7 @@ message HardwareUnit {
     string bound_candidate = 4;
     Identity identity = 5;
     optional Lease lease = 6;
+    repeated Capability capabilities = 7;
 }
 
 // ---------------------------------------------------------------------------

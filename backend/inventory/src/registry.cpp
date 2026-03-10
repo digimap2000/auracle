@@ -88,6 +88,7 @@ void InventoryRegistry::submit_probe_result(
                 .bound_candidate = id,
                 .identity = result.identity,
                 .lease = std::nullopt,
+                .capabilities = result.capabilities,
             };
             units_.emplace(unit_id, unit);
             event = UnitAdded{unit};
@@ -98,6 +99,7 @@ void InventoryRegistry::submit_probe_result(
             existing.kind = result.kind;
             existing.identity = result.identity;
             existing.present = result.present;
+            existing.capabilities = result.capabilities;
 
             if (!was_present && result.present) {
                 event = UnitOnline{unit_id};

@@ -32,6 +32,29 @@ namespace {
     }
 }
 
+[[nodiscard]] std::string capability_name(proto::Capability c) {
+    switch (c) {
+    case proto::CAPABILITY_BLE_SCAN:        return "ble-scan";
+    case proto::CAPABILITY_LE_AUDIO_SINK:   return "le-audio-sink";
+    case proto::CAPABILITY_LE_AUDIO_SOURCE: return "le-audio-source";
+    case proto::CAPABILITY_UNICAST_CLIENT:  return "unicast-client";
+    default:                                return "unknown";
+    }
+}
+
+[[nodiscard]] std::string format_capabilities(const proto::HardwareUnit& u) {
+    if (u.capabilities_size() == 0) {
+        return {};
+    }
+    std::string result = "  [";
+    for (int i = 0; i < u.capabilities_size(); ++i) {
+        if (i > 0) result += ", ";
+        result += capability_name(u.capabilities(i));
+    }
+    result += "]";
+    return result;
+}
+
 [[nodiscard]] std::string candidate_detail(const proto::HardwareCandidate& c) {
     if (c.has_serial()) {
         return c.serial().port();
@@ -78,10 +101,11 @@ void print_units_pretty(const proto::ListUnitsResponse& resp) {
                 identity_str += std::format(" fw={}", id.firmware_version());
             }
         }
-        std::cout << std::format("  {}  {:22s}{}{}\n",
+        std::cout << std::format("  {}  {:22s}{}{}{}\n",
             u.id(),
             kind_name(u.kind()),
             identity_str,
+            format_capabilities(u),
             u.present() ? "" : "  (offline)");
     }
 }

@@ -100,6 +100,12 @@ ProbeResult MdnsAgentProber::probe(const HardwareCandidate& candidate) {
             .serial = details->instance,
         },
         .present = true,
+        .capabilities = {
+            Capability::BleScan,
+            Capability::LeAudioSink,
+            Capability::LeAudioSource,
+            Capability::UnicastClient,
+        },
     };
 }
 

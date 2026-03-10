@@ -48,6 +48,13 @@ enum class ProbeOutcome {
     TransientFailure,
 };
 
+enum class Capability {
+    BleScan,
+    LeAudioSink,
+    LeAudioSource,
+    UnicastClient,
+};
+
 // ---------------------------------------------------------------------------
 // Transport-specific candidate details
 // ---------------------------------------------------------------------------

@@ -5,6 +5,7 @@
 #include <chrono>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace auracle::inventory {
 
@@ -20,6 +21,7 @@ struct ProbeResult {
     HardwareKind kind{};
     Identity identity;
     bool present{true};
+    std::vector<Capability> capabilities;
 };
 
 struct Lease {
@@ -37,6 +39,7 @@ struct HardwareUnit {
     CandidateId bound_candidate;
     Identity identity;
     std::optional<Lease> lease;
+    std::vector<Capability> capabilities;
 };
 
 } // namespace auracle::inventory
