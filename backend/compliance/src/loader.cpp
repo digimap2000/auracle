@@ -9,7 +9,7 @@
 
 namespace auracle::compliance {
 
-Rule load_rule_file(const std::filesystem::path& path) {
+LoadedRule load_rule_file(const std::filesystem::path& path) {
     std::ifstream input(path);
     if (!input) {
         throw std::runtime_error("Failed to open rule file: " + path.string());
@@ -19,12 +19,19 @@ Rule load_rule_file(const std::filesystem::path& path) {
         std::istreambuf_iterator<char>(input),
         std::istreambuf_iterator<char>()};
 
-    return parse_rule(text);
+    return LoadedRule{
+        .rule = parse_rule(text),
+        .path = path,
+    };
 }
 
-std::vector<Rule> load_rules_from_directory(
+std::vector<LoadedRule> load_rules_from_directory(
     const std::filesystem::path& path,
     const std::filesystem::path& extension) {
+    if (!std::filesystem::exists(path)) {
+        throw std::runtime_error("Rule directory does not exist: " + path.string());
+    }
+
     std::vector<std::filesystem::path> files;
 
     for (const auto& entry : std::filesystem::directory_iterator(path)) {
@@ -38,7 +45,7 @@ std::vector<Rule> load_rules_from_directory(
 
     std::ranges::sort(files);
 
-    std::vector<Rule> rules;
+    std::vector<LoadedRule> rules;
     rules.reserve(files.size());
     for (const auto& file : files) {
         rules.push_back(load_rule_file(file));

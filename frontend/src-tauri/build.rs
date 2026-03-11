@@ -7,6 +7,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build_server(false)
         .compile_protos(
             &[
+                &format!("{proto_root}/auracle/compliance/v1/compliance.proto"),
                 &format!("{proto_root}/auracle/inventory/v1/inventory.proto"),
                 &format!("{proto_root}/auracle/observation/v1/observation.proto"),
             ],

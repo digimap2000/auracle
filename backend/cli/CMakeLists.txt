@@ -3,6 +3,7 @@ if(NOT AURACLE_BUILD_CLI)
 endif()
 
 add_executable(auracle
+  src/compliance.cpp
   src/main.cpp
   src/list.cpp
   src/watch.cpp
@@ -11,5 +12,5 @@ add_executable(auracle
 )
 
 target_link_libraries(auracle
-  PRIVATE auracle_rpc
+  PRIVATE auracle_compliance auracle_rpc
 )

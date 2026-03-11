@@ -81,6 +81,37 @@ export interface ServiceDataEnumEntryMetadata {
   implications: string[];
 }
 
+export interface ComplianceRuleInfo {
+  id: string;
+  title: string;
+  verdict: string;
+  message: string;
+  reference: string;
+}
+
+export interface ComplianceSuiteInfo {
+  id: string;
+  title: string;
+  rule_ids: string[];
+}
+
+export interface ComplianceFinding {
+  rule_id: string;
+  verdict: string;
+  message: string;
+  reference: string;
+  observed_device_id: string;
+  observed_device_name: string;
+}
+
+export interface ComplianceRunResult {
+  unit_id: string;
+  target_id: string;
+  rule_count: number;
+  evaluated_device_count: number;
+  findings: ComplianceFinding[];
+}
+
 export async function startBleScan(): Promise<void> {
   return invoke<void>("start_ble_scan");
 }
@@ -157,5 +188,33 @@ export async function describeDaemonServiceDataFormats(
 ): Promise<ServiceDataFormatMetadata[]> {
   return invoke<ServiceDataFormatMetadata[]>("describe_daemon_service_data_formats", {
     serviceUuids,
+  });
+}
+
+export async function listComplianceRules(): Promise<ComplianceRuleInfo[]> {
+  return invoke<ComplianceRuleInfo[]>("list_compliance_rules");
+}
+
+export async function listComplianceSuites(): Promise<ComplianceSuiteInfo[]> {
+  return invoke<ComplianceSuiteInfo[]>("list_compliance_suites");
+}
+
+export async function runComplianceRule(
+  unitId: string,
+  ruleId: string
+): Promise<ComplianceRunResult> {
+  return invoke<ComplianceRunResult>("run_compliance_rule", {
+    unitId,
+    ruleId,
+  });
+}
+
+export async function runComplianceSuite(
+  unitId: string,
+  suiteId: string
+): Promise<ComplianceRunResult> {
+  return invoke<ComplianceRunResult>("run_compliance_suite", {
+    unitId,
+    suiteId,
   });
 }

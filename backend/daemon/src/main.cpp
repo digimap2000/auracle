@@ -1,3 +1,4 @@
+#include <compliance/repository.hpp>
 #include <inventory/inventory.hpp>
 #include <inventory/probe_scheduler.hpp>
 #include <inventory/probers/host_bluetooth_prober.hpp>
@@ -9,6 +10,7 @@
 #include <observation/local_bluetooth_scanner.hpp>
 #include <observation/remote_wire_scanner.hpp>
 #include <observation/scanner_manager.hpp>
+#include <rpc/compliance_service.hpp>
 #include <rpc/inventory_service.hpp>
 #include <rpc/observation_service.hpp>
 
@@ -129,12 +131,15 @@ int main(int /*argc*/, char* /*argv*/[]) {
     probe_scheduler.start();
 
     // --- gRPC server ---
+    auracle::compliance::Repository compliance_repository;
     auracle::rpc::InventoryServiceImpl inventory_svc(registry);
     auracle::rpc::ObservationServiceImpl observation_svc(scanner_manager);
+    auracle::rpc::ComplianceServiceImpl compliance_svc(compliance_repository, scanner_manager);
 
     const std::string listen_addr = "0.0.0.0:50051";
     grpc::ServerBuilder builder;
     builder.AddListeningPort(listen_addr, grpc::InsecureServerCredentials());
+    builder.RegisterService(&compliance_svc);
     builder.RegisterService(&inventory_svc);
     builder.RegisterService(&observation_svc);
 

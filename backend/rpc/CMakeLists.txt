@@ -52,10 +52,37 @@ add_custom_command(
   COMMENT "Generating protobuf/gRPC C++ sources for observation.proto"
 )
 
+# ---------------------------------------------------------------------------
+# Proto / gRPC code generation — compliance
+# ---------------------------------------------------------------------------
+set(COMPLIANCE_PROTO_FILE
+  "${AURACLE_PROTO_IMPORT_PATH}/auracle/compliance/v1/compliance.proto")
+
+set(COMPLIANCE_PROTO_GENERATED_SRCS
+  "${PROTO_GEN_DIR}/auracle/compliance/v1/compliance.pb.cc"
+  "${PROTO_GEN_DIR}/auracle/compliance/v1/compliance.pb.h"
+  "${PROTO_GEN_DIR}/auracle/compliance/v1/compliance.grpc.pb.cc"
+  "${PROTO_GEN_DIR}/auracle/compliance/v1/compliance.grpc.pb.h"
+)
+
+add_custom_command(
+  OUTPUT  ${COMPLIANCE_PROTO_GENERATED_SRCS}
+  COMMAND ${CMAKE_COMMAND} -E make_directory "${PROTO_GEN_DIR}/auracle/compliance/v1"
+  COMMAND protobuf::protoc
+          --cpp_out=${PROTO_GEN_DIR}
+          --grpc_out=${PROTO_GEN_DIR}
+          --plugin=protoc-gen-grpc=$<TARGET_FILE:gRPC::grpc_cpp_plugin>
+          -I ${AURACLE_PROTO_IMPORT_PATH}
+          ${COMPLIANCE_PROTO_FILE}
+  DEPENDS ${COMPLIANCE_PROTO_FILE}
+  COMMENT "Generating protobuf/gRPC C++ sources for compliance.proto"
+)
+
 # Suppress warnings in generated protobuf/gRPC sources
 set_source_files_properties(
   ${INVENTORY_PROTO_GENERATED_SRCS}
   ${OBSERVATION_PROTO_GENERATED_SRCS}
+  ${COMPLIANCE_PROTO_GENERATED_SRCS}
   PROPERTIES COMPILE_OPTIONS "-Wno-nullability-extension"
 )
 
@@ -63,16 +90,18 @@ set_source_files_properties(
 # auracle_rpc library
 # ---------------------------------------------------------------------------
 add_library(auracle_rpc
+  src/compliance_service.cpp
   src/inventory_service.cpp
   src/observation_service.cpp
   src/convert.cpp
   src/observation_convert.cpp
   ${INVENTORY_PROTO_GENERATED_SRCS}
   ${OBSERVATION_PROTO_GENERATED_SRCS}
+  ${COMPLIANCE_PROTO_GENERATED_SRCS}
 )
 
 target_link_libraries(auracle_rpc
-  PUBLIC  auracle_inventory auracle_observation auracle_assigned_numbers gRPC::grpc++ protobuf::libprotobuf
+  PUBLIC  auracle_compliance auracle_inventory auracle_observation auracle_assigned_numbers gRPC::grpc++ protobuf::libprotobuf
 )
 
 target_include_directories(auracle_rpc

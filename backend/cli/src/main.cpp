@@ -1,3 +1,4 @@
+#include "compliance.hpp"
 #include "list.hpp"
 #include "scan.hpp"
 #include "watch.hpp"
@@ -23,6 +24,11 @@ void print_usage() {
         << "usage: auracle <command> [options]\n"
         << "\n"
         << "commands:\n"
+        << "  compliance eval         evaluate local compliance rules against raw advertising bytes\n"
+        << "  compliance list-rules   list daemon-hosted compliance rules\n"
+        << "  compliance list-suites  list daemon-hosted compliance suites\n"
+        << "  compliance run-rule     run one daemon-hosted rule against a unit\n"
+        << "  compliance run-suite    run one daemon-hosted suite against a unit\n"
         << "  inventory list    show current candidates and units\n"
         << "  inventory watch   stream inventory events from the daemon\n"
         << "  scan list <id>    show retained BLE scan results for a unit\n"
@@ -53,7 +59,21 @@ void print_usage() {
         << "scan decode options:\n"
         << "  --raw <hex>       raw advertising payload bytes\n"
         << "  --scan-response <hex>\n"
-        << "                   raw scan response payload bytes\n";
+        << "                   raw scan response payload bytes\n"
+        << "\n"
+        << "compliance eval options:\n"
+        << "  --rule <path>     evaluate one rule file\n"
+        << "  --rules-dir <dir> evaluate all .rule files in a directory\n"
+        << "  --server <addr>   daemon address for list/run commands (default: 127.0.0.1:50051)\n"
+        << "  --raw <hex>       raw advertising payload bytes\n"
+        << "  --scan-response <hex>\n"
+        << "                   raw scan response payload bytes (ignored for EA-only rules)\n"
+        << "\n"
+        << "compliance run-rule usage:\n"
+        << "  auracle compliance run-rule <unit-id> <rule-id> [--server <addr>] [--format <fmt>]\n"
+        << "\n"
+        << "compliance run-suite usage:\n"
+        << "  auracle compliance run-suite <unit-id> <suite-id> [--server <addr>] [--format <fmt>]\n";
 }
 
 int run_list_main(int argc, char* argv[]) {
@@ -220,6 +240,147 @@ int run_scan_decode_main(int argc, char* argv[]) {
     return auracle::cli::run_scan_decode(opts);
 }
 
+int run_compliance_eval_main(int argc, char* argv[]) {
+    auracle::cli::ComplianceOptions opts;
+
+    for (int i = 3; i < argc; ++i) {
+        const std::string_view arg{argv[i]};
+
+        if (arg == "--rule" && i + 1 < argc) {
+            opts.rule_path = argv[++i];
+        } else if (arg == "--rules-dir" && i + 1 < argc) {
+            opts.rules_dir = argv[++i];
+        } else if (arg == "--raw" && i + 1 < argc) {
+            opts.raw_data_hex = argv[++i];
+        } else if (arg == "--scan-response" && i + 1 < argc) {
+            opts.raw_scan_response_hex = argv[++i];
+        } else if (arg == "--format" && i + 1 < argc) {
+            if (!parse_format(argv[++i], opts.format)) {
+                std::cerr << "unknown format: " << argv[i] << "\n";
+                return 2;
+            }
+        } else if (arg == "--verbose") {
+            opts.verbose = true;
+        } else {
+            std::cerr << "unknown option: " << arg << "\n";
+            print_usage();
+            return 2;
+        }
+    }
+
+    return auracle::cli::run_compliance_eval(opts);
+}
+
+int run_compliance_list_rules_main(int argc, char* argv[]) {
+    auracle::cli::ComplianceOptions opts;
+
+    for (int i = 3; i < argc; ++i) {
+        const std::string_view arg{argv[i]};
+        if (arg == "--server" && i + 1 < argc) {
+            opts.server = argv[++i];
+        } else if (arg == "--format" && i + 1 < argc) {
+            if (!parse_format(argv[++i], opts.format)) {
+                std::cerr << "unknown format: " << argv[i] << "\n";
+                return 2;
+            }
+        } else if (arg == "--verbose") {
+            opts.verbose = true;
+        } else {
+            std::cerr << "unknown option: " << arg << "\n";
+            print_usage();
+            return 2;
+        }
+    }
+
+    return auracle::cli::run_compliance_list_rules(opts);
+}
+
+int run_compliance_list_suites_main(int argc, char* argv[]) {
+    auracle::cli::ComplianceOptions opts;
+
+    for (int i = 3; i < argc; ++i) {
+        const std::string_view arg{argv[i]};
+        if (arg == "--server" && i + 1 < argc) {
+            opts.server = argv[++i];
+        } else if (arg == "--format" && i + 1 < argc) {
+            if (!parse_format(argv[++i], opts.format)) {
+                std::cerr << "unknown format: " << argv[i] << "\n";
+                return 2;
+            }
+        } else if (arg == "--verbose") {
+            opts.verbose = true;
+        } else {
+            std::cerr << "unknown option: " << arg << "\n";
+            print_usage();
+            return 2;
+        }
+    }
+
+    return auracle::cli::run_compliance_list_suites(opts);
+}
+
+int run_compliance_run_rule_main(int argc, char* argv[]) {
+    if (argc < 5) {
+        std::cerr << "usage: auracle compliance run-rule <unit-id> <rule-id> [options]\n";
+        return 2;
+    }
+
+    auracle::cli::ComplianceOptions opts;
+    opts.unit_id = argv[3];
+    opts.rule_id = argv[4];
+
+    for (int i = 5; i < argc; ++i) {
+        const std::string_view arg{argv[i]};
+        if (arg == "--server" && i + 1 < argc) {
+            opts.server = argv[++i];
+        } else if (arg == "--format" && i + 1 < argc) {
+            if (!parse_format(argv[++i], opts.format)) {
+                std::cerr << "unknown format: " << argv[i] << "\n";
+                return 2;
+            }
+        } else if (arg == "--verbose") {
+            opts.verbose = true;
+        } else {
+            std::cerr << "unknown option: " << arg << "\n";
+            print_usage();
+            return 2;
+        }
+    }
+
+    return auracle::cli::run_compliance_run_rule(opts);
+}
+
+int run_compliance_run_suite_main(int argc, char* argv[]) {
+    if (argc < 5) {
+        std::cerr << "usage: auracle compliance run-suite <unit-id> <suite-id> [options]\n";
+        return 2;
+    }
+
+    auracle::cli::ComplianceOptions opts;
+    opts.unit_id = argv[3];
+    opts.suite_id = argv[4];
+
+    for (int i = 5; i < argc; ++i) {
+        const std::string_view arg{argv[i]};
+        if (arg == "--server" && i + 1 < argc) {
+            opts.server = argv[++i];
+        } else if (arg == "--format" && i + 1 < argc) {
+            if (!parse_format(argv[++i], opts.format)) {
+                std::cerr << "unknown format: " << argv[i] << "\n";
+                return 2;
+            }
+        } else if (arg == "--verbose") {
+            opts.verbose = true;
+        } else {
+            std::cerr << "unknown option: " << arg << "\n";
+            print_usage();
+            return 2;
+        }
+    }
+
+    return auracle::cli::run_compliance_run_suite(opts);
+}
+
 } // namespace
 
 int main(int argc, char* argv[]) {
@@ -234,6 +395,12 @@ int main(int argc, char* argv[]) {
     if (cmd == "inventory") {
         if (sub == "list")  return run_list_main(argc, argv);
         if (sub == "watch") return run_watch_main(argc, argv);
+    } else if (cmd == "compliance") {
+        if (sub == "eval") return run_compliance_eval_main(argc, argv);
+        if (sub == "list-rules") return run_compliance_list_rules_main(argc, argv);
+        if (sub == "list-suites") return run_compliance_list_suites_main(argc, argv);
+        if (sub == "run-rule") return run_compliance_run_rule_main(argc, argv);
+        if (sub == "run-suite") return run_compliance_run_suite_main(argc, argv);
     } else if (cmd == "scan") {
         if (sub == "list")  return run_scan_list_main(argc, argv);
         if (sub == "watch") return run_scan_watch_main(argc, argv);

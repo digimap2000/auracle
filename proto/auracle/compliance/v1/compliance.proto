@@ -1,0 +1,80 @@
+syntax = "proto3";
+
+package auracle.compliance.v1;
+
+option cc_enable_arenas = true;
+
+enum Verdict {
+    VERDICT_UNSPECIFIED = 0;
+    VERDICT_FAIL = 1;
+    VERDICT_WARN = 2;
+    VERDICT_INFO = 3;
+}
+
+message ComplianceRule {
+    string id = 1;
+    string title = 2;
+    Verdict verdict = 3;
+    string message = 4;
+    string reference = 5;
+}
+
+message ComplianceSuite {
+    string id = 1;
+    string title = 2;
+    repeated string rule_ids = 3;
+}
+
+message ComplianceFinding {
+    string rule_id = 1;
+    Verdict verdict = 2;
+    string message = 3;
+    string reference = 4;
+    string observed_device_id = 5;
+    string observed_device_name = 6;
+}
+
+message ComplianceRunResult {
+    string unit_id = 1;
+    string target_id = 2;
+    uint32 rule_count = 3;
+    uint32 evaluated_device_count = 4;
+    repeated ComplianceFinding findings = 5;
+}
+
+message ListComplianceRulesRequest {}
+
+message ListComplianceRulesResponse {
+    repeated ComplianceRule rules = 1;
+}
+
+message ListComplianceSuitesRequest {}
+
+message ListComplianceSuitesResponse {
+    repeated ComplianceSuite suites = 1;
+}
+
+message RunComplianceRuleRequest {
+    string unit_id = 1;
+    string rule_id = 2;
+}
+
+message RunComplianceRuleResponse {
+    ComplianceRunResult result = 1;
+}
+
+message RunComplianceSuiteRequest {
+    string unit_id = 1;
+    string suite_id = 2;
+}
+
+message RunComplianceSuiteResponse {
+    ComplianceRunResult result = 1;
+}
+
+service ComplianceService {
+    rpc ListComplianceRules(ListComplianceRulesRequest) returns (ListComplianceRulesResponse);
+    rpc ListComplianceSuites(ListComplianceSuitesRequest) returns (ListComplianceSuitesResponse);
+    rpc RunComplianceRule(RunComplianceRuleRequest) returns (RunComplianceRuleResponse);
+    rpc RunComplianceSuite(RunComplianceSuiteRequest) returns (RunComplianceSuiteResponse);
+}

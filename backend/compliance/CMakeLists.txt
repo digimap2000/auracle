@@ -4,6 +4,8 @@ add_library(auracle_compliance
   src/loader.cpp
   src/normalizer.cpp
   src/parser.cpp
+  src/repository.cpp
+  src/suite_loader.cpp
   src/tokenizer.cpp
 )
 
@@ -13,6 +15,11 @@ target_include_directories(auracle_compliance
 )
 
 target_compile_features(auracle_compliance PUBLIC cxx_std_23)
+target_compile_definitions(auracle_compliance
+  PUBLIC
+    AURACLE_COMPLIANCE_RULE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/rules"
+    AURACLE_COMPLIANCE_SUITE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/suites"
+)
 
 if(BUILD_TESTING)
   find_package(GTest CONFIG QUIET)
@@ -35,6 +42,8 @@ if(BUILD_TESTING)
     tests/loader_test.cpp
     tests/normalizer_test.cpp
     tests/parser_test.cpp
+    tests/repository_test.cpp
+    tests/suite_loader_test.cpp
   )
 
   target_link_libraries(auracle_compliance_tests

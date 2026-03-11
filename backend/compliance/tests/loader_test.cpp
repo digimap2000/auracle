@@ -24,10 +24,10 @@ TEST(LoaderTest, LoadsRuleFile) {
         output << kRuleText;
     }
 
-    const Rule rule = load_rule_file(path);
-    EXPECT_EQ(rule.id, "AURACAST_SRC_001");
-    EXPECT_EQ(rule.verdict, Verdict::info);
-    EXPECT_EQ(rule.message, "Example rule");
+    const LoadedRule loaded = load_rule_file(path);
+    EXPECT_EQ(loaded.rule.id, "AURACAST_SRC_001");
+    EXPECT_EQ(loaded.rule.verdict, Verdict::info);
+    EXPECT_EQ(loaded.rule.message, "Example rule");
 
     std::filesystem::remove(path);
 }

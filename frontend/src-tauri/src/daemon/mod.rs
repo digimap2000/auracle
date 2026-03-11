@@ -1,6 +1,9 @@
 pub mod scan_bridge;
 
 pub mod proto {
+    pub mod compliance {
+        tonic::include_proto!("auracle.compliance.v1");
+    }
     pub mod inventory {
         tonic::include_proto!("auracle.inventory.v1");
     }
@@ -9,6 +12,7 @@ pub mod proto {
     }
 }
 
+use proto::compliance::compliance_service_client::ComplianceServiceClient;
 use proto::inventory::inventory_service_client::InventoryServiceClient;
 use proto::observation::observation_service_client::ObservationServiceClient;
 
@@ -35,6 +39,41 @@ pub struct DaemonCandidate {
     pub transport: String,
     pub present: bool,
     pub detail: String,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct ComplianceRuleInfo {
+    pub id: String,
+    pub title: String,
+    pub verdict: String,
+    pub message: String,
+    pub reference: String,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct ComplianceSuiteInfo {
+    pub id: String,
+    pub title: String,
+    pub rule_ids: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct ComplianceFinding {
+    pub rule_id: String,
+    pub verdict: String,
+    pub message: String,
+    pub reference: String,
+    pub observed_device_id: String,
+    pub observed_device_name: String,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct ComplianceRunResult {
+    pub unit_id: String,
+    pub target_id: String,
+    pub rule_count: u32,
+    pub evaluated_device_count: u32,
+    pub findings: Vec<ComplianceFinding>,
 }
 
 fn kind_name(kind: i32) -> &'static str {
@@ -92,6 +131,14 @@ pub fn observation_client() -> ObservationServiceClient<Channel> {
         .get_or_init(|| Channel::from_static(DEFAULT_DAEMON_ADDR).connect_lazy())
         .clone();
     ObservationServiceClient::new(channel)
+}
+
+pub fn compliance_client() -> ComplianceServiceClient<Channel> {
+    static COMPLIANCE_CHANNEL: std::sync::OnceLock<Channel> = std::sync::OnceLock::new();
+    let channel = COMPLIANCE_CHANNEL
+        .get_or_init(|| Channel::from_static(DEFAULT_DAEMON_ADDR).connect_lazy())
+        .clone();
+    ComplianceServiceClient::new(channel)
 }
 
 impl DaemonClient {

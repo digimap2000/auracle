@@ -9,7 +9,10 @@ use ble::{
     ServiceDataFieldMetadata, ServiceDataFormatMetadata,
 };
 use daemon::scan_bridge::DaemonScanBridge;
-use daemon::{DaemonCandidate, DaemonClient, DaemonUnit};
+use daemon::{
+    ComplianceFinding, ComplianceRuleInfo, ComplianceRunResult, ComplianceSuiteInfo,
+    DaemonCandidate, DaemonClient, DaemonUnit,
+};
 use devices::ConnectedDevice;
 use error::AuracleError;
 use serial::SerialPort;
@@ -153,6 +156,123 @@ async fn get_daemon_candidates() -> Result<Vec<DaemonCandidate>, AuracleError> {
 }
 
 #[tauri::command]
+async fn list_compliance_rules() -> Result<Vec<ComplianceRuleInfo>, AuracleError> {
+    let mut client = daemon::compliance_client();
+    let response = client
+        .list_compliance_rules(daemon::proto::compliance::ListComplianceRulesRequest {})
+        .await
+        .map_err(|e| AuracleError::CommandFailed(format!("ListComplianceRules failed: {e}")))?;
+
+    Ok(response
+        .into_inner()
+        .rules
+        .into_iter()
+        .map(|rule| ComplianceRuleInfo {
+            id: rule.id,
+            title: rule.title,
+            verdict: match rule.verdict {
+                1 => "FAIL".to_string(),
+                2 => "WARN".to_string(),
+                3 => "INFO".to_string(),
+                _ => "UNSPECIFIED".to_string(),
+            },
+            message: rule.message,
+            reference: rule.reference,
+        })
+        .collect())
+}
+
+#[tauri::command]
+async fn list_compliance_suites() -> Result<Vec<ComplianceSuiteInfo>, AuracleError> {
+    let mut client = daemon::compliance_client();
+    let response = client
+        .list_compliance_suites(daemon::proto::compliance::ListComplianceSuitesRequest {})
+        .await
+        .map_err(|e| AuracleError::CommandFailed(format!("ListComplianceSuites failed: {e}")))?;
+
+    Ok(response
+        .into_inner()
+        .suites
+        .into_iter()
+        .map(|suite| ComplianceSuiteInfo {
+            id: suite.id,
+            title: suite.title,
+            rule_ids: suite.rule_ids,
+        })
+        .collect())
+}
+
+fn map_compliance_run_result(
+    result: daemon::proto::compliance::ComplianceRunResult,
+) -> ComplianceRunResult {
+    ComplianceRunResult {
+        unit_id: result.unit_id,
+        target_id: result.target_id,
+        rule_count: result.rule_count,
+        evaluated_device_count: result.evaluated_device_count,
+        findings: result
+            .findings
+            .into_iter()
+            .map(|finding| ComplianceFinding {
+                rule_id: finding.rule_id,
+                verdict: match finding.verdict {
+                    1 => "FAIL".to_string(),
+                    2 => "WARN".to_string(),
+                    3 => "INFO".to_string(),
+                    _ => "UNSPECIFIED".to_string(),
+                },
+                message: finding.message,
+                reference: finding.reference,
+                observed_device_id: finding.observed_device_id,
+                observed_device_name: finding.observed_device_name,
+            })
+            .collect(),
+    }
+}
+
+#[tauri::command]
+async fn run_compliance_rule(
+    unit_id: String,
+    rule_id: String,
+) -> Result<ComplianceRunResult, AuracleError> {
+    let mut client = daemon::compliance_client();
+    let response = client
+        .run_compliance_rule(daemon::proto::compliance::RunComplianceRuleRequest {
+            unit_id,
+            rule_id,
+        })
+        .await
+        .map_err(|e| AuracleError::CommandFailed(format!("RunComplianceRule failed: {e}")))?;
+
+    response
+        .into_inner()
+        .result
+        .map(map_compliance_run_result)
+        .ok_or_else(|| AuracleError::CommandFailed("RunComplianceRule returned no result".to_string()))
+}
+
+#[tauri::command]
+async fn run_compliance_suite(
+    unit_id: String,
+    suite_id: String,
+) -> Result<ComplianceRunResult, AuracleError> {
+    let mut client = daemon::compliance_client();
+    let response = client
+        .run_compliance_suite(daemon::proto::compliance::RunComplianceSuiteRequest {
+            unit_id,
+            suite_id,
+        })
+        .await
+        .map_err(|e| AuracleError::CommandFailed(format!("RunComplianceSuite failed: {e}")))?;
+
+    response
+        .into_inner()
+        .result
+        .map(map_compliance_run_result)
+        .ok_or_else(|| AuracleError::CommandFailed("RunComplianceSuite returned no result".to_string()))
+}
+
+#[tauri::command]
 async fn decode_daemon_advertisement(
     raw_data: Vec<u8>,
     raw_scan_response: Vec<u8>,
@@ -259,6 +379,10 @@ pub fn run() {
             get_connected_devices,
             get_daemon_candidates,
             get_daemon_units,
+            list_compliance_rules,
+            list_compliance_suites,
+            run_compliance_rule,
+            run_compliance_suite,
             scan_serial_ports,
             start_ble_scan,
             start_daemon_scan,
