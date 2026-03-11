@@ -7,6 +7,7 @@ export interface ManufacturerData {
 
 export interface BleDevice {
   unit_id: string;
+  stable_id: string;
   id: string;
   name: string;
   rssi: number;
@@ -19,6 +20,7 @@ export interface BleDevice {
 
 export interface BlePacket {
   unit_id: string;
+  stable_id: string;
   id: string;
   device_id: string;
   name: string;

@@ -154,6 +154,7 @@ impl DaemonScanBridge {
     }
 
     fn proto_to_ble_device(
+        stable_id: &str,
         unit_id: &str,
         timestamp_ms: i64,
         adv: &observation::BleAdvertisement,
@@ -175,6 +176,7 @@ impl DaemonScanBridge {
 
         BleDevice {
             unit_id: unit_id.to_string(),
+            stable_id: stable_id.to_string(),
             id: adv.device_id.clone(),
             name,
             rssi: adv.rssi as i16,
@@ -191,6 +193,7 @@ impl DaemonScanBridge {
     }
 
     fn proto_to_ble_packet(
+        stable_id: &str,
         unit_id: &str,
         timestamp_ms: i64,
         adv: &observation::BleAdvertisement,
@@ -199,6 +202,7 @@ impl DaemonScanBridge {
 
         BlePacket {
             unit_id: unit_id.to_string(),
+            stable_id: stable_id.to_string(),
             id: format!("{unit_id}:{packet_id}"),
             device_id: adv.device_id.clone(),
             name: if adv.name.is_empty() {
@@ -230,6 +234,80 @@ impl DaemonScanBridge {
             raw_scan_response: adv.raw_scan_response.clone(),
             timestamp_ms,
         }
+    }
+
+    fn is_host_unit(unit_id: &str) -> bool {
+        unit_id.starts_with("hostbt:")
+    }
+
+    fn is_address_like(device_id: &str) -> bool {
+        device_id.contains(':')
+    }
+
+    fn normalize_name(name: &str) -> String {
+        name.trim().to_lowercase()
+    }
+
+    fn hex_prefix(bytes: &[u8], max_len: usize) -> String {
+        bytes.iter()
+            .take(max_len)
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
+    }
+
+    fn fingerprint_hash(parts: &[String]) -> String {
+        let mut hash: u64 = 0xcbf29ce484222325;
+
+        for part in parts {
+            for byte in part.as_bytes() {
+                hash ^= u64::from(*byte);
+                hash = hash.wrapping_mul(0x100000001b3);
+            }
+            hash ^= u64::from(b'|');
+            hash = hash.wrapping_mul(0x100000001b3);
+        }
+
+        format!("{hash:016x}")
+    }
+
+    fn stable_id_for(unit_id: &str, adv: &observation::BleAdvertisement) -> String {
+        if Self::is_host_unit(unit_id) || !Self::is_address_like(&adv.device_id) {
+            return adv.device_id.clone();
+        }
+
+        let mut parts = Vec::new();
+
+        if !adv.name.is_empty() {
+            parts.push(format!("name:{}", Self::normalize_name(&adv.name)));
+        }
+        if adv.company_id != 0 {
+            parts.push(format!("company:{:04x}", adv.company_id));
+        }
+        if !adv.service_uuids.is_empty() {
+            let mut uuids = adv
+                .service_uuids
+                .iter()
+                .map(|uuid| uuid.to_lowercase())
+                .collect::<Vec<_>>();
+            uuids.sort();
+            uuids.dedup();
+            parts.push(format!("svc:{}", uuids.join(",")));
+        }
+        if !adv.manufacturer_data.is_empty() {
+            parts.push(format!(
+                "mfg:{}",
+                Self::hex_prefix(&adv.manufacturer_data, 8)
+            ));
+        }
+        if !adv.raw_data.is_empty() {
+            parts.push(format!("raw:{}", Self::hex_prefix(&adv.raw_data, 12)));
+        }
+
+        if parts.is_empty() {
+            return adv.device_id.clone();
+        }
+
+        format!("fp:{}", Self::fingerprint_hash(&parts))
     }
 
     async fn stream_loop(
@@ -269,8 +347,9 @@ impl DaemonScanBridge {
                                 continue;
                             }
                             if let Some(observation::observation_event::Payload::BleAdvertisement(adv)) = obs_event.payload {
-                                let mut device = Self::proto_to_ble_device(&unit_id, obs_event.timestamp_ms, &adv);
-                                let packet = Self::proto_to_ble_packet(&unit_id, obs_event.timestamp_ms, &adv);
+                                let stable_id = Self::stable_id_for(&unit_id, &adv);
+                                let mut device = Self::proto_to_ble_device(&stable_id, &unit_id, obs_event.timestamp_ms, &adv);
+                                let packet = Self::proto_to_ble_packet(&stable_id, &unit_id, obs_event.timestamp_ms, &adv);
                                 let _ = app.emit("ble-packet-received", &packet);
                                 let mut state = inner.lock().await;
                                 let Some(scan) = state.scans.get_mut(&unit_id) else {
@@ -278,29 +357,32 @@ impl DaemonScanBridge {
                                 };
 
                                 // Preserve name and services from previous advertisements
+                                if let Some(existing) = scan.devices.get(&stable_id) {
+                                    device.id = existing.id.clone();
+                                }
                                 if device.name == "Unknown" {
-                                    if let Some(existing) = scan.devices.get(&device.id) {
+                                    if let Some(existing) = scan.devices.get(&stable_id) {
                                         if existing.name != "Unknown" {
                                             device.name = existing.name.clone();
                                         }
                                     }
                                 }
                                 if device.services.is_empty() {
-                                    if let Some(existing) = scan.devices.get(&device.id) {
+                                    if let Some(existing) = scan.devices.get(&stable_id) {
                                         if !existing.services.is_empty() {
                                             device.services = existing.services.clone();
                                         }
                                     }
                                 }
                                 if device.manufacturer_data.is_empty() {
-                                    if let Some(existing) = scan.devices.get(&device.id) {
+                                    if let Some(existing) = scan.devices.get(&stable_id) {
                                         if !existing.manufacturer_data.is_empty() {
                                             device.manufacturer_data = existing.manufacturer_data.clone();
                                         }
                                     }
                                 }
 
-                                scan.devices.insert(device.id.clone(), device);
+                                scan.devices.insert(stable_id, device);
                                 dirty = true;
 
                                 // Debounce: emit at most ~2 times per second

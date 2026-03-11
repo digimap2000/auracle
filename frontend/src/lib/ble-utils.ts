@@ -16,12 +16,40 @@ export const KNOWN_SERVICES: Record<string, string> = {
 
 const companyLookup = bleCompanyIds as Record<string, string>;
 
+export interface CompanyOption {
+  companyId: number;
+  label: string;
+}
+
 export function resolveServiceName(uuid: string): string {
   return KNOWN_SERVICES[uuid.toLowerCase()] ?? uuid;
 }
 
 export function resolveCompanyName(id: number): string | null {
   return companyLookup[String(id)] ?? null;
+}
+
+export function searchCompanyOptions(query: string, limit = 50): CompanyOption[] {
+  const normalizedQuery = query.trim().toLowerCase();
+
+  return Object.entries(companyLookup)
+    .map(([companyId, label]) => ({
+      companyId: Number(companyId),
+      label,
+    }))
+    .filter((option) => Number.isFinite(option.companyId))
+    .filter((option) => {
+      if (!normalizedQuery) {
+        return true;
+      }
+
+      const hex = `0x${option.companyId.toString(16).padStart(4, "0")}`;
+      return option.label.toLowerCase().includes(normalizedQuery)
+        || option.companyId.toString().includes(normalizedQuery)
+        || hex.includes(normalizedQuery);
+    })
+    .sort((a, b) => a.label.localeCompare(b.label))
+    .slice(0, limit);
 }
 
 export function formatHexBytes(bytes: number[]): string {

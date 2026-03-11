@@ -8,12 +8,23 @@ import {
   resolveCompanyName,
   rssiColor,
   isStandardUuid,
+  relativeTime,
 } from "@/lib/ble-utils";
 
 interface DeviceCardProps {
   device: BleDevice;
   expanded: boolean;
   onToggle: () => void;
+  observedFields?: {
+    key: string;
+    source: "adv" | "scan-response";
+    typeName: string;
+    typeHex: string;
+    summary: string;
+    hex: string;
+    count: number;
+    lastSeenIso: string;
+  }[];
 }
 
 const SERVICE_BADGE_PRIORITY: Record<string, { label: string; variant: "default" | "outline" }> = {
@@ -26,7 +37,12 @@ const SERVICE_BADGE_PRIORITY: Record<string, { label: string; variant: "default"
 
 const PRIORITY_ORDER = Object.keys(SERVICE_BADGE_PRIORITY);
 
-export function DeviceCard({ device, expanded, onToggle }: DeviceCardProps) {
+export function DeviceCard({
+  device,
+  expanded,
+  onToggle,
+  observedFields = [],
+}: DeviceCardProps) {
   // Resolve services for badge display — include unknown services too
   const resolvedServices = device.services.map((uuid) => {
     const name = resolveServiceName(uuid);
@@ -183,6 +199,53 @@ export function DeviceCard({ device, expanded, onToggle }: DeviceCardProps) {
             </div>
           ) : (
             <p className="text-xs text-muted-foreground">No services advertised</p>
+          )}
+
+          <Separator className="my-3" />
+
+          {observedFields.length > 0 ? (
+            <div className="text-xs">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <span className="font-medium text-foreground">Observed AD Structures</span>
+                <span className="text-muted-foreground">
+                  {observedFields.length} distinct fields
+                </span>
+              </div>
+              <div className="space-y-2">
+                {observedFields.map((field) => (
+                  <div
+                    key={field.key}
+                    className="rounded-md border border-border/60 px-3 py-2"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">
+                          {field.typeName}
+                          <span className="ml-2 font-mono text-xs text-muted-foreground">
+                            {field.typeHex}
+                          </span>
+                        </p>
+                        <p className="mt-1 text-muted-foreground">{field.summary}</p>
+                      </div>
+                      <div className="shrink-0 text-right text-muted-foreground">
+                        <p>{field.count} seen</p>
+                        <p>{field.source}</p>
+                      </div>
+                    </div>
+                    <p className="mt-2 break-all font-mono text-[11px] text-muted-foreground">
+                      {field.hex || "No field payload"}
+                    </p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      last seen {relativeTime(field.lastSeenIso)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              No decodable AD structures retained for this device yet.
+            </p>
           )}
         </div>
       </div>

@@ -12,6 +12,7 @@ pub struct BluetoothAdapter {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BleDevice {
     pub unit_id: String,
+    pub stable_id: String,
     pub id: String,
     pub name: String,
     pub rssi: i16,
@@ -26,6 +27,7 @@ pub struct BleDevice {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BlePacket {
     pub unit_id: String,
+    pub stable_id: String,
     pub id: String,
     pub device_id: String,
     pub name: String,

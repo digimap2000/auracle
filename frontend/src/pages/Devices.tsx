@@ -77,6 +77,88 @@ export function Devices({ bleDevices, blePackets, scanning, activeUnit }: Device
     [blePackets]
   );
 
+  const observedFieldsByStableId = useMemo(() => {
+    const grouped = new Map<
+      string,
+      Map<
+        string,
+        {
+          key: string;
+          source: "adv" | "scan-response";
+          typeName: string;
+          typeHex: string;
+          summary: string;
+          hex: string;
+          count: number;
+          lastSeenMs: number;
+        }
+      >
+    >();
+
+    const ingestFields = (
+      stableId: string,
+      source: "adv" | "scan-response",
+      payload: number[],
+      timestampMs: number
+    ) => {
+      if (payload.length === 0) {
+        return;
+      }
+
+      let fields = grouped.get(stableId);
+      if (!fields) {
+        fields = new Map();
+        grouped.set(stableId, fields);
+      }
+
+      for (const field of parseAdvertisementStructures(payload)) {
+        const typeHex = field.type >= 0
+          ? `0x${field.type.toString(16).padStart(2, "0").toUpperCase()}`
+          : "0x??";
+        const key = `${source}:${typeHex}:${field.hex}`;
+        const existing = fields.get(key);
+        if (existing) {
+          existing.count += 1;
+          existing.lastSeenMs = Math.max(existing.lastSeenMs, timestampMs);
+          continue;
+        }
+
+        fields.set(key, {
+          key,
+          source,
+          typeName: field.typeName,
+          typeHex,
+          summary: field.summary,
+          hex: field.hex,
+          count: 1,
+          lastSeenMs: timestampMs,
+        });
+      }
+    };
+
+    for (const packet of blePackets) {
+      ingestFields(packet.stable_id, "adv", packet.raw_data, packet.timestamp_ms);
+      ingestFields(packet.stable_id, "scan-response", packet.raw_scan_response, packet.timestamp_ms);
+    }
+
+    return new Map(
+      [...grouped.entries()].map(([stableId, fields]) => [
+        stableId,
+        [...fields.values()]
+          .sort((a, b) =>
+            b.lastSeenMs - a.lastSeenMs
+            || b.count - a.count
+            || a.typeName.localeCompare(b.typeName)
+            || a.hex.localeCompare(b.hex)
+          )
+          .map((field) => ({
+            ...field,
+            lastSeenIso: new Date(field.lastSeenMs).toISOString(),
+          })),
+      ])
+    );
+  }, [blePackets]);
+
   useEffect(() => {
     if (recentPackets.length === 0) {
       setSelectedPacketId(null);
@@ -96,7 +178,7 @@ export function Devices({ bleDevices, blePackets, scanning, activeUnit }: Device
   const packetCounts = useMemo(() => {
     const counts = new Map<string, number>();
     for (const packet of blePackets) {
-      counts.set(packet.device_id, (counts.get(packet.device_id) ?? 0) + 1);
+      counts.set(packet.stable_id, (counts.get(packet.stable_id) ?? 0) + 1);
     }
     return counts;
   }, [blePackets]);
@@ -104,22 +186,33 @@ export function Devices({ bleDevices, blePackets, scanning, activeUnit }: Device
   const strongestRssi = useMemo(() => {
     const strongest = new Map<string, number>();
     for (const packet of blePackets) {
-      const existing = strongest.get(packet.device_id);
+      const existing = strongest.get(packet.stable_id);
       if (existing == null || packet.rssi > existing) {
-        strongest.set(packet.device_id, packet.rssi);
+        strongest.set(packet.stable_id, packet.rssi);
       }
     }
     return strongest;
+  }, [blePackets]);
+
+  const firstSeenAt = useMemo(() => {
+    const firstSeen = new Map<string, number>();
+    for (const packet of blePackets) {
+      const existing = firstSeen.get(packet.stable_id);
+      if (existing == null || packet.timestamp_ms < existing) {
+        firstSeen.set(packet.stable_id, packet.timestamp_ms);
+      }
+    }
+    return firstSeen;
   }, [blePackets]);
 
   const sortedDevices = useMemo(() => {
     const windows = rssiWindows.current;
 
     const smoothed = bleDevices.map((device) => {
-      let samples = windows.get(device.id);
+      let samples = windows.get(device.stable_id);
       if (!samples) {
         samples = [];
-        windows.set(device.id, samples);
+        windows.set(device.stable_id, samples);
       }
       samples.push(device.rssi);
       if (samples.length > RSSI_WINDOW_SIZE) {
@@ -133,12 +226,13 @@ export function Devices({ bleDevices, blePackets, scanning, activeUnit }: Device
       return {
         ...device,
         rssi: avg,
-        packetCount: packetCounts.get(device.id) ?? 0,
-        strongestRssi: strongestRssi.get(device.id) ?? avg,
+        packetCount: packetCounts.get(device.stable_id) ?? 0,
+        strongestRssi: strongestRssi.get(device.stable_id) ?? avg,
+        firstSeenAt: firstSeenAt.get(device.stable_id) ?? Number.MAX_SAFE_INTEGER,
       };
     });
 
-    const activeIds = new Set(bleDevices.map((device) => device.id));
+    const activeIds = new Set(bleDevices.map((device) => device.stable_id));
     for (const id of windows.keys()) {
       if (!activeIds.has(id)) {
         windows.delete(id);
@@ -154,9 +248,14 @@ export function Devices({ bleDevices, blePackets, scanning, activeUnit }: Device
       if (!aUnknown && !bUnknown && a.name !== b.name) {
         return a.name.localeCompare(b.name);
       }
-      return b.rssi - a.rssi;
+
+      if (a.firstSeenAt !== b.firstSeenAt) {
+        return a.firstSeenAt - b.firstSeenAt;
+      }
+
+      return a.id.localeCompare(b.id);
     });
-  }, [bleDevices, packetCounts, strongestRssi]);
+  }, [bleDevices, firstSeenAt, packetCounts, strongestRssi]);
 
   const serviceSummary = useMemo(() => {
     const counts = new Map<string, number>();
@@ -281,15 +380,16 @@ export function Devices({ bleDevices, blePackets, scanning, activeUnit }: Device
                 <ScrollArea className="h-[calc(100vh-22rem)] xl:h-[calc(100vh-19rem)]">
                   <div className="space-y-3 pr-4">
                     {sortedDevices.map((device) => (
-                      <div key={device.id} className="space-y-2">
+                      <div key={device.stable_id} className="space-y-2">
                         <DeviceCard
                           device={device}
-                          expanded={expandedIds.has(device.id)}
+                          expanded={expandedIds.has(device.stable_id)}
+                          observedFields={observedFieldsByStableId.get(device.stable_id)}
                           onToggle={() =>
                             setExpandedIds((prev) => {
                               const next = new Set(prev);
-                              if (next.has(device.id)) next.delete(device.id);
-                              else next.add(device.id);
+                              if (next.has(device.stable_id)) next.delete(device.stable_id);
+                              else next.add(device.stable_id);
                               return next;
                             })
                           }

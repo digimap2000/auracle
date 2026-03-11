@@ -3,6 +3,7 @@
 #include <dts/log.hpp>
 
 #include <chrono>
+#include <ranges>
 
 namespace auracle::observation {
 
@@ -26,8 +27,12 @@ constexpr std::string_view log_tag = "scanner-mgr";
         incoming.tx_power = existing.tx_power;
     }
 
-    if (incoming.service_uuids.empty() && !existing.service_uuids.empty()) {
-        incoming.service_uuids = existing.service_uuids;
+    if (!existing.service_uuids.empty()) {
+        for (const auto& uuid : existing.service_uuids) {
+            if (std::ranges::find(incoming.service_uuids, uuid) == incoming.service_uuids.end()) {
+                incoming.service_uuids.push_back(uuid);
+            }
+        }
     }
 
     if (incoming.manufacturer_data.empty() && !existing.manufacturer_data.empty()) {
