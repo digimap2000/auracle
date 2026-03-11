@@ -24,6 +24,11 @@ public:
         const obs_proto::StopScanRequest* request,
         obs_proto::StopScanResponse* response) override;
 
+    grpc::Status ListObservedDevices(
+        grpc::ServerContext* context,
+        const obs_proto::ListObservedDevicesRequest* request,
+        obs_proto::ListObservedDevicesResponse* response) override;
+
     grpc::Status WatchObservations(
         grpc::ServerContext* context,
         const obs_proto::WatchObservationsRequest* request,

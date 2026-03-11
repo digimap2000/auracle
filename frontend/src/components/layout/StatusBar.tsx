@@ -1,51 +1,44 @@
-import { Bluetooth, Download, RefreshCw, RotateCcw } from "lucide-react";
+import { Bluetooth, Cpu, Download, RefreshCw, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import type { BluetoothAdapter } from "@/lib/tauri";
+import type { DaemonUnit } from "@/lib/tauri";
 import type { useUpdater } from "@/hooks/useUpdater";
 
 interface StatusBarProps {
+  activeUnit: DaemonUnit | null;
   connectedCount: number;
   updater: ReturnType<typeof useUpdater>;
-  bluetoothAdapter: {
-    adapter: BluetoothAdapter | null;
-    loading: boolean;
-    error: string | null;
-  };
 }
 
-export function StatusBar({ connectedCount, updater, bluetoothAdapter }: StatusBarProps) {
+function kindIcon(kind: string) {
+  switch (kind) {
+    case "host-bluetooth":
+      return <Bluetooth size={12} />;
+    default:
+      return <Cpu size={12} />;
+  }
+}
+
+export function StatusBar({ activeUnit, connectedCount, updater }: StatusBarProps) {
   const isConnected = connectedCount > 0;
   const { status, checkForUpdate, downloadAndInstall, restartApp } = updater;
-  const btAvailable = bluetoothAdapter.adapter?.is_available ?? false;
-  const btTooltip = bluetoothAdapter.loading
-    ? "Detecting Bluetooth adapter\u2026"
-    : bluetoothAdapter.error
-      ? bluetoothAdapter.error
-      : bluetoothAdapter.adapter?.name ?? "No adapter";
 
   return (
     <div className="flex h-8 shrink-0 items-center justify-between border-t bg-background px-3 text-xs text-muted-foreground">
       <div className="flex items-center gap-3">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span className="flex items-center">
-              <Bluetooth
-                size={12}
-                className={cn(
-                  btAvailable ? "text-primary" : "text-muted-foreground/30"
-                )}
-              />
-            </span>
-          </TooltipTrigger>
-          <TooltipContent side="top">
-            <p>{btTooltip}</p>
-          </TooltipContent>
-        </Tooltip>
+        {activeUnit ? (
+          <div className="flex items-center gap-1.5">
+            <span className="text-primary">{kindIcon(activeUnit.kind)}</span>
+            <span>{activeUnit.product || activeUnit.kind}</span>
+            <div
+              className={cn(
+                "size-1.5 rounded-full",
+                activeUnit.present ? "bg-success" : "bg-muted-foreground/30"
+              )}
+            />
+          </div>
+        ) : (
+          <span className="text-muted-foreground/50">No unit selected</span>
+        )}
         <div className="flex items-center gap-1.5">
           <div
             className={cn(

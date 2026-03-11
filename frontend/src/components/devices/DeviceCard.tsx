@@ -117,20 +117,24 @@ export function DeviceCard({ device, expanded, onToggle }: DeviceCardProps) {
       {/* Line 2: expanded = manufacturer left + device ID right; collapsed = manufacturer only */}
       {expanded ? (
         <div className="mt-1 flex items-center justify-between">
-          {companyName && companyHex ? (
-            <span className="text-xs text-muted-foreground">
-              {companyName} - {companyHex}
-            </span>
-          ) : (
-            <span />
-          )}
+          <span className="text-xs text-muted-foreground">
+            {companyHex
+              ? `${companyName ?? "Unknown"} - ${companyHex}`
+              : "No manufacturer data"}
+          </span>
           <span className="font-mono text-xs text-muted-foreground">
             {device.id}
           </span>
         </div>
-      ) : companyName ? (
-        <p className="mt-1 text-xs text-muted-foreground">{companyName}</p>
-      ) : null}
+      ) : (
+        <p className="mt-1 text-xs text-muted-foreground">
+          {companyName ?? (
+            companyHex
+              ? <span className="italic">Unknown ({companyHex})</span>
+              : <span className="italic">No manufacturer data</span>
+          )}
+        </p>
+      )}
 
       {/* Expandable detail section */}
       <div

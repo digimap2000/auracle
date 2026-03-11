@@ -1,10 +1,9 @@
 #pragma once
 
 #include "types.hpp"
+#include "scanner.hpp"
 
 #include <inventory/inventory.hpp>
-
-#include <dts/bluetooth.hpp>
 #include <dts/signal.hpp>
 
 #include <expected>
@@ -12,6 +11,7 @@
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 namespace auracle::observation {
 
@@ -25,7 +25,7 @@ public:
 
     // Bind a scanner to a unit. Called by daemon when a capable unit appears.
     void bind_scanner(const std::string& unit_id,
-                      std::unique_ptr<dts::bluetooth::scanner> scanner);
+                      ScannerPtr scanner);
 
     // Remove scanner binding. Called when unit is removed.
     void unbind_scanner(const std::string& unit_id);
@@ -38,13 +38,17 @@ public:
     [[nodiscard]] std::expected<void, std::string>
     stop_scan(const std::string& unit_id);
 
+    // Return the daemon's retained BLE device view for one unit or all units.
+    [[nodiscard]] std::vector<ObservedBleDevice>
+    list_observed_devices(const std::string& unit_id = {}) const;
+
     // Signal emitted for every observation from any active scanner.
     dts::signal<void(const ObservationEvent&)> on_observation;
 
 private:
     struct BoundScanner {
-        std::unique_ptr<dts::bluetooth::scanner> scanner;
-        dts::scoped_connection adv_conn;
+        ScannerPtr scanner;
+        std::unordered_map<std::string, ObservedBleDevice> devices;
     };
 
     inventory::InventoryRegistry& registry_;

@@ -16,6 +16,15 @@ message BleAdvertisement {
     repeated string service_uuids = 5;
     bytes manufacturer_data = 6;    // raw manufacturer-specific data (after company ID)
     uint32 company_id = 7;          // Bluetooth SIG company identifier
+    string address_type = 8;        // public, random, etc when known
+    uint32 sid = 9;                 // advertising SID when known, 255 = unknown
+    uint32 adv_type = 10;           // transport-specific advertising type
+    uint32 adv_props = 11;          // transport-specific advertising properties bitmask
+    uint32 interval = 12;           // advertising interval units from source packet
+    uint32 primary_phy = 13;
+    uint32 secondary_phy = 14;
+    bytes raw_data = 15;            // raw advertising payload
+    bytes raw_scan_response = 16;   // raw scan response payload if available
 }
 
 // ---------------------------------------------------------------------------
@@ -28,6 +37,18 @@ message ObservationEvent {
     oneof payload {
         BleAdvertisement ble_advertisement = 3;
     }
+}
+
+// ---------------------------------------------------------------------------
+// Retained scan state
+// ---------------------------------------------------------------------------
+
+message ObservedBleDevice {
+    string unit_id = 1;
+    BleAdvertisement advertisement = 2;
+    int64 first_seen_ms = 3;
+    int64 last_seen_ms = 4;
+    uint64 seen_count = 5;
 }
 
 // ---------------------------------------------------------------------------
@@ -47,12 +68,22 @@ message StopScanRequest {
 
 message StopScanResponse {}
 
+message ListObservedDevicesRequest {
+    string unit_id = 1;             // empty = all units
+}
+
+message ListObservedDevicesResponse {
+    repeated ObservedBleDevice devices = 1;
+}
+
 message WatchObservationsRequest {
     string unit_id = 1;             // empty = all units
+    bool include_initial_snapshot = 2;
 }
 
 service ObservationService {
     rpc StartScan(StartScanRequest) returns (StartScanResponse);
     rpc StopScan(StopScanRequest) returns (StopScanResponse);
+    rpc ListObservedDevices(ListObservedDevicesRequest) returns (ListObservedDevicesResponse);
     rpc WatchObservations(WatchObservationsRequest) returns (stream ObservationEvent);
 }

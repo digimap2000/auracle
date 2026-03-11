@@ -35,6 +35,18 @@ grpc::Status ObservationServiceImpl::StopScan(
     return grpc::Status::OK;
 }
 
+grpc::Status ObservationServiceImpl::ListObservedDevices(
+    grpc::ServerContext* /*context*/,
+    const obs_proto::ListObservedDevicesRequest* request,
+    obs_proto::ListObservedDevicesResponse* response) {
+
+    for (const auto& device : manager_.list_observed_devices(request->unit_id())) {
+        to_proto(device, response->add_devices());
+    }
+
+    return grpc::Status::OK;
+}
+
 grpc::Status ObservationServiceImpl::WatchObservations(
     grpc::ServerContext* context,
     const obs_proto::WatchObservationsRequest* request,
@@ -43,6 +55,22 @@ grpc::Status ObservationServiceImpl::WatchObservations(
     dts::channel<observation::ObservationEvent> events;
 
     const std::string filter_unit = request->unit_id();
+
+    if (request->include_initial_snapshot()) {
+        for (const auto& device : manager_.list_observed_devices(filter_unit)) {
+            obs_proto::ObservationEvent proto_event;
+            observation::ObservationEvent domain_event{
+                .unit_id = device.unit_id,
+                .payload = device.advertisement,
+            };
+            to_proto(domain_event, &proto_event);
+            proto_event.set_timestamp_ms(device.last_seen_ms);
+
+            if (!writer->Write(proto_event)) {
+                return grpc::Status::OK;
+            }
+        }
+    }
 
     auto conn = manager_.on_observation.connect(
         [&events, &filter_unit](const observation::ObservationEvent& event) {

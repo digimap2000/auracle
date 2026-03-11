@@ -2,9 +2,12 @@
 #include <inventory/probe_scheduler.hpp>
 #include <inventory/probers/host_bluetooth_prober.hpp>
 #include <inventory/probers/mdns_agent_prober.hpp>
+#include <inventory/probers/serial_agent_prober.hpp>
 #include <inventory/providers/host_bluetooth_provider.hpp>
 #include <inventory/providers/mdns_provider.hpp>
 #include <inventory/providers/serial_provider.hpp>
+#include <observation/local_bluetooth_scanner.hpp>
+#include <observation/remote_wire_scanner.hpp>
 #include <observation/scanner_manager.hpp>
 #include <rpc/inventory_service.hpp>
 #include <rpc/observation_service.hpp>
@@ -33,6 +36,12 @@ void signal_handler(int /*sig*/) {
 }
 
 constexpr std::string_view log_tag = "daemon";
+
+[[nodiscard]] bool has_capability(
+    const auracle::inventory::HardwareUnit& unit,
+    auracle::inventory::Capability capability) {
+    return std::ranges::find(unit.capabilities, capability) != unit.capabilities.end();
+}
 
 } // namespace
 
@@ -67,21 +76,42 @@ int main(int /*argc*/, char* /*argv*/[]) {
     probe_scheduler.add_prober(
         auracle::inventory::Transport::Mdns,
         std::make_unique<auracle::inventory::MdnsAgentProber>());
+    probe_scheduler.add_prober(
+        auracle::inventory::Transport::Serial,
+        std::make_unique<auracle::inventory::SerialAgentProber>());
 
     // --- observation layer ---
     auracle::observation::ScannerManager scanner_manager(registry);
 
-    // When a HostBluetoothAdapter unit is promoted, bind a scanner to it.
-    // When it is removed, unbind.
+    // Bind a scanner implementation when a scan-capable unit is promoted.
     auto unit_event_conn = registry.on_event.connect(
-        [&scanner_manager](const auracle::inventory::InventoryEvent& event) {
-            std::visit([&scanner_manager](const auto& e) {
+        [&scanner_manager, &registry](const auracle::inventory::InventoryEvent& event) {
+            std::visit([&scanner_manager, &registry](const auto& e) {
                 using T = std::decay_t<decltype(e)>;
-                if constexpr (std::is_same_v<T, auracle::inventory::UnitAdded>) {
+                if constexpr (std::is_same_v<T, auracle::inventory::UnitAdded>
+                           || std::is_same_v<T, auracle::inventory::UnitUpdated>) {
+                    if (!has_capability(e.unit, auracle::inventory::Capability::BleScan)) {
+                        return;
+                    }
+
                     if (e.unit.kind == auracle::inventory::HardwareKind::HostBluetoothAdapter) {
                         scanner_manager.bind_scanner(
                             e.unit.id.value,
-                            std::make_unique<dts::bluetooth::scanner>());
+                            std::make_unique<auracle::observation::LocalBluetoothScanner>(
+                                std::make_unique<dts::bluetooth::scanner>()));
+                        return;
+                    }
+
+                    if (e.unit.kind == auracle::inventory::HardwareKind::Nrf5340AudioDK) {
+                        const auto candidate = registry.get_candidate(e.unit.bound_candidate);
+                        if (!candidate.has_value()) {
+                            dts::log::warn(log_tag, "missing candidate for unit {}", e.unit.id.value);
+                            return;
+                        }
+
+                        scanner_manager.bind_scanner(
+                            e.unit.id.value,
+                            std::make_unique<auracle::observation::RemoteWireScanner>(*candidate));
                     }
                 } else if constexpr (std::is_same_v<T, auracle::inventory::UnitRemoved>) {
                     scanner_manager.unbind_scanner(e.id.value);

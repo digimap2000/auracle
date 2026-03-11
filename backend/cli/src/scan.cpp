@@ -56,6 +56,44 @@ void print_advertisement_json(const obs_proto::ObservationEvent& event) {
     }
 }
 
+void print_observed_device_pretty(const obs_proto::ObservedBleDevice& device) {
+    const auto& adv = device.advertisement();
+    std::string name_str = adv.name().empty() ? "(unknown)" : adv.name();
+
+    std::cout << std::format(
+        "{:>4} dBm  {}  {}  seen={} last={}ms",
+        adv.rssi(),
+        adv.device_id(),
+        name_str,
+        device.seen_count(),
+        device.last_seen_ms());
+
+    if (adv.company_id() != 0) {
+        std::cout << std::format("  company=0x{:04X}", adv.company_id());
+    }
+
+    if (adv.service_uuids_size() > 0) {
+        std::cout << "  svc=[";
+        for (int i = 0; i < adv.service_uuids_size(); ++i) {
+            if (i > 0) std::cout << ",";
+            std::cout << adv.service_uuids(i);
+        }
+        std::cout << "]";
+    }
+
+    std::cout << "\n";
+}
+
+void print_observed_device_json(const obs_proto::ObservedBleDevice& device) {
+    google::protobuf::util::JsonPrintOptions options;
+    options.always_print_fields_with_no_presence = true;
+    std::string json;
+    auto status = google::protobuf::util::MessageToJsonString(device, &json, options);
+    if (status.ok()) {
+        std::cout << json << '\n';
+    }
+}
+
 } // namespace
 
 int run_scan(const ScanOptions& opts) {
@@ -91,6 +129,7 @@ int run_scan(const ScanOptions& opts) {
     // Stream observations
     obs_proto::WatchObservationsRequest watch_request;
     watch_request.set_unit_id(opts.unit_id);
+    watch_request.set_include_initial_snapshot(opts.include_initial_snapshot);
 
     grpc::ClientContext watch_context;
     g_scan_context.store(&watch_context, std::memory_order_relaxed);
@@ -137,6 +176,45 @@ int run_scan(const ScanOptions& opts) {
 
     std::cerr << std::format("auracle: stream error: {}\n", status.error_message());
     return 3;
+}
+
+int run_scan_list(const ScanOptions& opts) {
+    auto channel = grpc::CreateChannel(
+        opts.server, grpc::InsecureChannelCredentials());
+    auto stub = obs_proto::ObservationService::NewStub(channel);
+
+    if (opts.verbose) {
+        std::cerr << std::format("querying retained scan results from {}...\n", opts.server);
+    }
+
+    obs_proto::ListObservedDevicesRequest request;
+    request.set_unit_id(opts.unit_id);
+
+    grpc::ClientContext context;
+    obs_proto::ListObservedDevicesResponse response;
+    auto status = stub->ListObservedDevices(&context, request, &response);
+
+    if (!status.ok()) {
+        std::cerr << std::format(
+            "auracle: failed to list scan results for unit {}: {}\n",
+            opts.unit_id,
+            status.error_message());
+        return 3;
+    }
+
+    for (const auto& device : response.devices()) {
+        switch (opts.format) {
+        case OutputFormat::Pretty:
+            print_observed_device_pretty(device);
+            break;
+        case OutputFormat::Json:
+        case OutputFormat::Prototext:
+            print_observed_device_json(device);
+            break;
+        }
+    }
+
+    return 0;
 }
 
 } // namespace auracle::cli

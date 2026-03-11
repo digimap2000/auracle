@@ -9,6 +9,7 @@
 
 #include <expected>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -27,6 +28,7 @@ public:
     // Snapshot queries
     [[nodiscard]] std::vector<HardwareCandidate> list_candidates(bool include_gone = false) const;
     [[nodiscard]] std::vector<HardwareUnit> list_units(bool include_offline = false) const;
+    [[nodiscard]] std::optional<HardwareCandidate> get_candidate(const CandidateId& id) const;
 
     // Claiming (future)
     [[nodiscard]] std::expected<Lease, std::string>

@@ -10,7 +10,6 @@ pub mod proto {
 }
 
 use proto::inventory::inventory_service_client::InventoryServiceClient;
-use proto::observation::observation_service_client::ObservationServiceClient;
 
 use serde::Serialize;
 use tonic::transport::Channel;
@@ -82,10 +81,8 @@ fn candidate_detail(candidate: &proto::inventory::HardwareCandidate) -> String {
     }
 }
 
-#[allow(dead_code)] // observation used in Phase 5
 pub struct DaemonClient {
     inventory: InventoryServiceClient<Channel>,
-    observation: ObservationServiceClient<Channel>,
 }
 
 impl DaemonClient {
@@ -96,8 +93,7 @@ impl DaemonClient {
             .map_err(|e| format!("Failed to connect to daemon: {e}"))?;
 
         Ok(Self {
-            inventory: InventoryServiceClient::new(channel.clone()),
-            observation: ObservationServiceClient::new(channel),
+            inventory: InventoryServiceClient::new(channel),
         })
     }
 
@@ -144,28 +140,4 @@ impl DaemonClient {
         Ok(candidates)
     }
 
-    #[allow(dead_code)] // used in Phase 5
-    pub async fn start_scan(&mut self, unit_id: &str, allow_duplicates: bool) -> Result<(), String> {
-        let request = proto::observation::StartScanRequest {
-            unit_id: unit_id.to_string(),
-            allow_duplicates,
-        };
-        self.observation
-            .start_scan(request)
-            .await
-            .map_err(|e| format!("StartScan failed: {e}"))?;
-        Ok(())
-    }
-
-    #[allow(dead_code)] // used in Phase 5
-    pub async fn stop_scan(&mut self, unit_id: &str) -> Result<(), String> {
-        let request = proto::observation::StopScanRequest {
-            unit_id: unit_id.to_string(),
-        };
-        self.observation
-            .stop_scan(request)
-            .await
-            .map_err(|e| format!("StopScan failed: {e}"))?;
-        Ok(())
-    }
 }

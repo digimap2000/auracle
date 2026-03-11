@@ -1,5 +1,7 @@
 add_library(auracle_observation
     src/scanner_manager.cpp
+    src/local_bluetooth_scanner.cpp
+    src/remote_wire_scanner.cpp
 )
 
 target_include_directories(auracle_observation

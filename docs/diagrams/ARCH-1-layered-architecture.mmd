@@ -3,17 +3,19 @@ graph TB
     subgraph AppLayer["Desktop App Layer"]
         direction LR
         ReactApp["React 18<br/><i>Pages · Hooks · Components</i>"]
-        TauriBackend["Tauri 2 · Rust<br/><i>Commands · Events · BLE</i>"]
+        TauriBackend["Tauri 2 · Rust<br/><i>gRPC Client · DaemonScanBridge</i>"]
         ReactApp <-->|"Commands /<br/>Events"| TauriBackend
     end
 
     subgraph DaemonLayer["Backend Daemon Layer"]
         direction LR
-        gRPCServer["gRPC Server<br/><i>InventoryService</i>"]
-        Registry["Inventory Registry<br/><i>State Machine</i>"]
+        gRPCServer["gRPC Server<br/><i>Inventory + Observation</i>"]
+        Registry["Inventory Registry<br/><i>Capability Model</i>"]
         Providers["Providers<br/><i>Serial · BT · mDNS</i>"]
         Probers["Probers<br/><i>BT · mDNS Agent</i>"]
+        ScanMgr["Scanner Manager<br/><i>CoreBluetooth</i>"]
         gRPCServer --- Registry
+        gRPCServer --- ScanMgr
         Registry --- Providers
         Registry --- Probers
     end
@@ -30,11 +32,8 @@ graph TB
         BathysV2["Bathys V2"]
     end
 
-    BLE["BLE Radio<br/><i>btleplug</i>"]
-
     TauriBackend <-->|"gRPC<br/>localhost:50051"| gRPCServer
     Providers <-->|"NDJSON<br/>USB CDC ACM"| nRF5340
     Providers <-->|"TCP"| ESP32
-    TauriBackend <--> BLE
+    ScanMgr <-->|"BLE"| External
     nRF5340 <-->|"BLE ISO"| External
-    BLE <-->|"BLE"| External

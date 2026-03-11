@@ -1,21 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 
-export interface BluetoothAdapter {
-  id: string;
-  name: string;
-  is_available: boolean;
-}
-
-export async function getBluetoothAdapter(): Promise<BluetoothAdapter> {
-  return invoke<BluetoothAdapter>("get_bluetooth_adapter");
-}
-
 export interface ManufacturerData {
   company_id: number;
   data: number[];
 }
 
 export interface BleDevice {
+  unit_id: string;
   id: string;
   name: string;
   rssi: number;
@@ -24,6 +15,28 @@ export interface BleDevice {
   services: string[];
   manufacturer_data: ManufacturerData[];
   last_seen: string;
+}
+
+export interface BlePacket {
+  unit_id: string;
+  id: string;
+  device_id: string;
+  name: string;
+  rssi: number;
+  tx_power: number | null;
+  service_uuids: string[];
+  company_id: number | null;
+  company_data: number[];
+  address_type: string;
+  sid: number;
+  adv_type: number;
+  adv_props: number;
+  interval: number;
+  primary_phy: number;
+  secondary_phy: number;
+  raw_data: number[];
+  raw_scan_response: number[];
+  timestamp_ms: number;
 }
 
 export async function startBleScan(): Promise<void> {
@@ -62,4 +75,27 @@ export async function disconnectDevice(deviceId: string): Promise<void> {
 
 export async function getConnectedDevices(): Promise<ConnectedDevice[]> {
   return invoke<ConnectedDevice[]>("get_connected_devices");
+}
+
+export interface DaemonUnit {
+  id: string;
+  kind: string;
+  present: boolean;
+  vendor: string;
+  product: string;
+  serial: string;
+  firmware_version: string;
+  capabilities: string[];
+}
+
+export async function getDaemonUnits(): Promise<DaemonUnit[]> {
+  return invoke<DaemonUnit[]>("get_daemon_units");
+}
+
+export async function startDaemonScan(unitId: string): Promise<void> {
+  return invoke<void>("start_daemon_scan", { unitId });
+}
+
+export async function stopDaemonScan(unitId: string): Promise<void> {
+  return invoke<void>("stop_daemon_scan", { unitId });
 }

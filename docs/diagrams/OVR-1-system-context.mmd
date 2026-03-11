@@ -2,12 +2,15 @@
 graph TB
     subgraph Desktop["Desktop Application"]
         direction LR
-        Tauri["Tauri 2<br/><i>Rust</i>"]
+        Tauri["Tauri 2<br/><i>Rust gRPC Client</i>"]
         React["React 18<br/><i>TypeScript</i>"]
     end
 
     subgraph Daemon["Backend Daemon"]
-        gRPC["C++ gRPC Server<br/><i>Inventory Registry</i>"]
+        direction LR
+        gRPC["C++ gRPC Server<br/><i>Inventory + Observation</i>"]
+        BT["CoreBluetooth<br/><i>BLE Scanner</i>"]
+        gRPC --- BT
     end
 
     subgraph Firmware["Firmware"]
@@ -15,8 +18,6 @@ graph TB
         nRF["nRF5340<br/><i>Sink / Source</i>"]
         ESP["ESP32<br/><i>TCP Bridge</i>"]
     end
-
-    BT["Bluetooth Adapter<br/><i>btleplug</i>"]
 
     subgraph Targets["Target Devices"]
         direction LR
@@ -28,6 +29,5 @@ graph TB
     Tauri <-->|"gRPC"| gRPC
     gRPC <-->|"NDJSON / Serial"| nRF
     gRPC <-->|"TCP"| ESP
-    Tauri <--> BT
-    nRF <-->|"BLE ISO"| Targets
     BT <-->|"BLE"| Targets
+    nRF <-->|"BLE ISO"| Targets

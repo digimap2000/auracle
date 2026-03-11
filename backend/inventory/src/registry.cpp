@@ -136,6 +136,15 @@ std::vector<HardwareUnit> InventoryRegistry::list_units(bool include_offline) co
     return result;
 }
 
+std::optional<HardwareCandidate> InventoryRegistry::get_candidate(const CandidateId& id) const {
+    std::scoped_lock lock(mutex_);
+    auto it = candidates_.find(id);
+    if (it == candidates_.end()) {
+        return std::nullopt;
+    }
+    return it->second;
+}
+
 std::expected<Lease, std::string>
 InventoryRegistry::claim_unit(
     const UnitId& /*id*/, std::string /*client_id*/, std::string /*purpose*/) {

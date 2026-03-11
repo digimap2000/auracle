@@ -59,8 +59,24 @@ async fn start_ble_scan(
 }
 
 #[tauri::command]
-async fn stop_ble_scan(state: tauri::State<'_, DaemonScanBridge>) -> Result<(), AuracleError> {
-    state.stop_scan().await
+async fn stop_ble_scan(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, DaemonScanBridge>,
+) -> Result<(), AuracleError> {
+    // Find the host bluetooth unit to stop scanning on
+    let mut client = DaemonClient::connect()
+        .await
+        .map_err(AuracleError::ConnectionFailed)?;
+    let units = client
+        .list_units(false)
+        .await
+        .map_err(AuracleError::CommandFailed)?;
+
+    let bt_unit = units.into_iter().find(|u| u.kind == "host-bluetooth");
+    match bt_unit {
+        Some(unit) => state.stop_scan(app, unit.id).await,
+        None => Ok(()),
+    }
 }
 
 #[tauri::command]
@@ -114,8 +130,12 @@ async fn start_daemon_scan(
 }
 
 #[tauri::command]
-async fn stop_daemon_scan(state: tauri::State<'_, DaemonScanBridge>) -> Result<(), AuracleError> {
-    state.stop_scan().await
+async fn stop_daemon_scan(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, DaemonScanBridge>,
+    unit_id: String,
+) -> Result<(), AuracleError> {
+    state.stop_scan(app, unit_id).await
 }
 
 #[tauri::command]

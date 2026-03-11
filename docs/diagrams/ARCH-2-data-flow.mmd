@@ -4,9 +4,10 @@ flowchart LR
         BLE_ADV["BLE<br/>Advertisements"]
     end
 
-    subgraph Path1["Path 1 — Direct BLE"]
-        btleplug["btleplug<br/><i>Rust</i>"]
-        Scanner["BLE Scanner<br/><i>BleScanner state</i>"]
+    subgraph Path1["Path 1 — Daemon BLE Scan"]
+        CBScanner["dts::bluetooth::scanner<br/><i>CoreBluetooth</i>"]
+        ScanMgr["ScannerManager<br/><i>ObservationEvent</i>"]
+        ObsSvc["ObservationService<br/><i>gRPC stream</i>"]
     end
 
     subgraph Path2["Path 2 — Firmware Serial"]
@@ -16,27 +17,30 @@ flowchart LR
 
     subgraph DaemonSvc["Backend Daemon"]
         Inventory["Inventory<br/>Registry"]
-        gRPCSvc["gRPC<br/>Service"]
+        InvSvc["InventoryService<br/><i>gRPC</i>"]
     end
 
     subgraph TauriApp["Tauri App"]
+        ScanBridge["DaemonScanBridge<br/><i>gRPC → BleDevice</i>"]
         RustBE["Rust Backend<br/><i>Commands + Events</i>"]
     end
 
     subgraph UI["React Frontend"]
         Hooks["Hooks<br/><i>useDevices</i>"]
-        Pages["Pages<br/><i>Home · Devices</i>"]
+        Pages["Pages<br/><i>Home</i>"]
     end
 
-    BLE_ADV -->|"BLE"| btleplug
-    btleplug --> Scanner
-    Scanner -->|"ble-devices-updated<br/><i>Tauri event</i>"| RustBE
+    BLE_ADV -->|"BLE"| CBScanner
+    CBScanner --> ScanMgr
+    ScanMgr --> ObsSvc
+    ObsSvc -->|"gRPC stream<br/>WatchObservations"| ScanBridge
+    ScanBridge -->|"ble-devices-updated<br/><i>Tauri event</i>"| RustBE
 
     BLE_ADV -->|"BLE ISO"| nRF
     nRF -->|"NDJSON<br/>/dev/tty.*"| WireParser
     WireParser --> Inventory
-    Inventory --> gRPCSvc
-    gRPCSvc -->|"gRPC stream<br/>Watch RPC"| RustBE
+    Inventory --> InvSvc
+    InvSvc -->|"gRPC<br/>ListUnits / Watch"| RustBE
 
     RustBE -->|"Tauri IPC"| Hooks
     Hooks --> Pages

@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -9,16 +10,19 @@ use tokio_stream::StreamExt;
 
 use super::proto::observation;
 use super::proto::observation::observation_service_client::ObservationServiceClient;
-use crate::ble::{BleDevice, ManufacturerData};
+use crate::ble::{BleDevice, BlePacket, ManufacturerData};
 use crate::error::AuracleError;
 
 const DEFAULT_DAEMON_ADDR: &str = "http://127.0.0.1:50051";
+static NEXT_PACKET_ID: AtomicU64 = AtomicU64::new(1);
 
-struct BridgeState {
-    scanning: bool,
+struct UnitScanState {
     devices: HashMap<String, BleDevice>,
     cancel_tx: Option<tokio::sync::oneshot::Sender<()>>,
-    unit_id: String,
+}
+
+struct BridgeState {
+    scans: HashMap<String, UnitScanState>,
 }
 
 /// Bridges daemon BLE scan observations to the existing `ble-devices-updated` Tauri event.
@@ -31,18 +35,22 @@ impl DaemonScanBridge {
     pub fn new() -> Self {
         Self {
             inner: Arc::new(Mutex::new(BridgeState {
-                scanning: false,
-                devices: HashMap::new(),
-                cancel_tx: None,
-                unit_id: String::new(),
+                scans: HashMap::new(),
             })),
         }
     }
 
     pub async fn start_scan(&self, app: AppHandle, unit_id: String) -> Result<(), AuracleError> {
-        let mut state = self.inner.lock().await;
-        if state.scanning {
-            return Ok(());
+        {
+            let state = self.inner.lock().await;
+            if state
+                .scans
+                .get(&unit_id)
+                .and_then(|scan| scan.cancel_tx.as_ref())
+                .is_some()
+            {
+                return Ok(());
+            }
         }
 
         let channel = tonic::transport::Channel::from_static(DEFAULT_DAEMON_ADDR)
@@ -61,48 +69,54 @@ impl DaemonScanBridge {
             .await
             .map_err(|e| AuracleError::CommandFailed(format!("StartScan failed: {e}")))?;
 
-        state.scanning = true;
-        state.devices.clear();
-        state.unit_id = unit_id.clone();
-
         let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel::<()>();
-        state.cancel_tx = Some(cancel_tx);
+
+        {
+            let mut state = self.inner.lock().await;
+            let scan = state
+                .scans
+                .entry(unit_id.clone())
+                .or_insert_with(|| UnitScanState {
+                    devices: HashMap::new(),
+                    cancel_tx: None,
+                });
+            scan.cancel_tx = Some(cancel_tx);
+        }
 
         let inner = Arc::clone(&self.inner);
+        let stream_app = app.clone();
 
         tokio::spawn(async move {
-            Self::stream_loop(client, unit_id, inner, app, cancel_rx).await;
+            Self::stream_loop(client, unit_id, inner, stream_app, cancel_rx).await;
         });
 
         Ok(())
     }
 
-    pub async fn stop_scan(&self) -> Result<(), AuracleError> {
-        let mut state = self.inner.lock().await;
-        if !state.scanning {
-            return Ok(());
-        }
-        state.scanning = false;
-        let unit_id = state.unit_id.clone();
-        if let Some(tx) = state.cancel_tx.take() {
+    pub async fn stop_scan(&self, app: AppHandle, unit_id: String) -> Result<(), AuracleError> {
+        let cancel_tx = {
+            let mut state = self.inner.lock().await;
+            state.scans.remove(&unit_id).and_then(|mut scan| scan.cancel_tx.take())
+        };
+
+        if let Some(tx) = cancel_tx {
             let _ = tx.send(());
         }
 
         // Best-effort stop scan on daemon
-        if !unit_id.is_empty() {
-            if let Ok(channel) = tonic::transport::Channel::from_static(DEFAULT_DAEMON_ADDR)
-                .connect()
-                .await
-            {
-                let mut client = ObservationServiceClient::new(channel);
-                let _ = client
-                    .stop_scan(observation::StopScanRequest {
-                        unit_id,
-                    })
-                    .await;
-            }
+        if let Ok(channel) = tonic::transport::Channel::from_static(DEFAULT_DAEMON_ADDR)
+            .connect()
+            .await
+        {
+            let mut client = ObservationServiceClient::new(channel);
+            let _ = client
+                .stop_scan(observation::StopScanRequest {
+                    unit_id,
+                })
+                .await;
         }
 
+        Self::emit_devices(&self.inner, &app).await;
         Ok(())
     }
 
@@ -117,7 +131,33 @@ impl DaemonScanBridge {
         });
     }
 
-    fn proto_to_ble_device(adv: &observation::BleAdvertisement) -> BleDevice {
+    fn collect_devices(state: &BridgeState) -> Vec<BleDevice> {
+        state
+            .scans
+            .values()
+            .flat_map(|scan| scan.devices.values().cloned())
+            .collect()
+    }
+
+    async fn emit_devices(inner: &Arc<Mutex<BridgeState>>, app: &AppHandle) {
+        let devices = {
+            let state = inner.lock().await;
+            Self::collect_devices(&state)
+        };
+        let _ = app.emit("ble-devices-updated", &devices);
+    }
+
+    fn timestamp_to_rfc3339(timestamp_ms: i64) -> String {
+        DateTime::<Utc>::from_timestamp_millis(timestamp_ms)
+            .map(|ts| ts.to_rfc3339())
+            .unwrap_or_else(|| Utc::now().to_rfc3339())
+    }
+
+    fn proto_to_ble_device(
+        unit_id: &str,
+        timestamp_ms: i64,
+        adv: &observation::BleAdvertisement,
+    ) -> BleDevice {
         let name = if adv.name.is_empty() {
             "Unknown".to_string()
         } else {
@@ -134,6 +174,7 @@ impl DaemonScanBridge {
         };
 
         BleDevice {
+            unit_id: unit_id.to_string(),
             id: adv.device_id.clone(),
             name,
             rssi: adv.rssi as i16,
@@ -145,7 +186,49 @@ impl DaemonScanBridge {
             },
             services: adv.service_uuids.clone(),
             manufacturer_data,
-            last_seen: Utc::now().to_rfc3339(),
+            last_seen: Self::timestamp_to_rfc3339(timestamp_ms),
+        }
+    }
+
+    fn proto_to_ble_packet(
+        unit_id: &str,
+        timestamp_ms: i64,
+        adv: &observation::BleAdvertisement,
+    ) -> BlePacket {
+        let packet_id = NEXT_PACKET_ID.fetch_add(1, Ordering::Relaxed);
+
+        BlePacket {
+            unit_id: unit_id.to_string(),
+            id: format!("{unit_id}:{packet_id}"),
+            device_id: adv.device_id.clone(),
+            name: if adv.name.is_empty() {
+                "Unknown".to_string()
+            } else {
+                adv.name.clone()
+            },
+            rssi: adv.rssi as i16,
+            tx_power: if adv.tx_power == 127 {
+                None
+            } else {
+                Some(adv.tx_power as i16)
+            },
+            service_uuids: adv.service_uuids.clone(),
+            company_id: if adv.company_id == 0 {
+                None
+            } else {
+                Some(adv.company_id as u16)
+            },
+            company_data: adv.manufacturer_data.clone(),
+            address_type: adv.address_type.clone(),
+            sid: adv.sid,
+            adv_type: adv.adv_type,
+            adv_props: adv.adv_props,
+            interval: adv.interval,
+            primary_phy: adv.primary_phy,
+            secondary_phy: adv.secondary_phy,
+            raw_data: adv.raw_data.clone(),
+            raw_scan_response: adv.raw_scan_response.clone(),
+            timestamp_ms,
         }
     }
 
@@ -158,7 +241,8 @@ impl DaemonScanBridge {
     ) {
         let stream_result = client
             .watch_observations(observation::WatchObservationsRequest {
-                unit_id,
+                unit_id: unit_id.clone(),
+                include_initial_snapshot: true,
             })
             .await;
 
@@ -166,8 +250,6 @@ impl DaemonScanBridge {
             Ok(response) => response.into_inner(),
             Err(e) => {
                 eprintln!("[daemon-scan] WatchObservations failed: {e}");
-                let mut state = inner.lock().await;
-                state.scanning = false;
                 return;
             }
         };
@@ -183,32 +265,47 @@ impl DaemonScanBridge {
                 event = stream.next() => {
                     match event {
                         Some(Ok(obs_event)) => {
+                            if obs_event.unit_id != unit_id {
+                                continue;
+                            }
                             if let Some(observation::observation_event::Payload::BleAdvertisement(adv)) = obs_event.payload {
-                                let mut device = Self::proto_to_ble_device(&adv);
+                                let mut device = Self::proto_to_ble_device(&unit_id, obs_event.timestamp_ms, &adv);
+                                let packet = Self::proto_to_ble_packet(&unit_id, obs_event.timestamp_ms, &adv);
+                                let _ = app.emit("ble-packet-received", &packet);
                                 let mut state = inner.lock().await;
+                                let Some(scan) = state.scans.get_mut(&unit_id) else {
+                                    break;
+                                };
 
                                 // Preserve name and services from previous advertisements
                                 if device.name == "Unknown" {
-                                    if let Some(existing) = state.devices.get(&device.id) {
+                                    if let Some(existing) = scan.devices.get(&device.id) {
                                         if existing.name != "Unknown" {
                                             device.name = existing.name.clone();
                                         }
                                     }
                                 }
                                 if device.services.is_empty() {
-                                    if let Some(existing) = state.devices.get(&device.id) {
+                                    if let Some(existing) = scan.devices.get(&device.id) {
                                         if !existing.services.is_empty() {
                                             device.services = existing.services.clone();
                                         }
                                     }
                                 }
+                                if device.manufacturer_data.is_empty() {
+                                    if let Some(existing) = scan.devices.get(&device.id) {
+                                        if !existing.manufacturer_data.is_empty() {
+                                            device.manufacturer_data = existing.manufacturer_data.clone();
+                                        }
+                                    }
+                                }
 
-                                state.devices.insert(device.id.clone(), device);
+                                scan.devices.insert(device.id.clone(), device);
                                 dirty = true;
 
                                 // Debounce: emit at most ~2 times per second
                                 if last_emit.elapsed().as_millis() >= 500 {
-                                    let devices: Vec<BleDevice> = state.devices.values().cloned().collect();
+                                    let devices = Self::collect_devices(&state);
                                     let _ = app.emit("ble-devices-updated", &devices);
                                     dirty = false;
                                     last_emit = Instant::now();
@@ -225,13 +322,16 @@ impl DaemonScanBridge {
                 // Periodic flush for debounced events + stale device pruning
                 _ = tokio::time::sleep(tokio::time::Duration::from_millis(500)) => {
                     let mut state = inner.lock().await;
-                    let before = state.devices.len();
-                    Self::prune_stale(&mut state.devices);
-                    if state.devices.len() != before {
+                    let Some(scan) = state.scans.get_mut(&unit_id) else {
+                        break;
+                    };
+                    let before = scan.devices.len();
+                    Self::prune_stale(&mut scan.devices);
+                    if scan.devices.len() != before {
                         dirty = true;
                     }
                     if dirty {
-                        let devices: Vec<BleDevice> = state.devices.values().cloned().collect();
+                        let devices = Self::collect_devices(&state);
                         let _ = app.emit("ble-devices-updated", &devices);
                         dirty = false;
                         last_emit = Instant::now();
@@ -239,8 +339,5 @@ impl DaemonScanBridge {
                 }
             }
         }
-
-        let mut state = inner.lock().await;
-        state.scanning = false;
     }
 }
