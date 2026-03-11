@@ -1,8 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bluetooth } from "lucide-react";
+import { Bluetooth, Fingerprint } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable";
 import { Separator } from "@/components/ui/separator";
 import {
   Select,
@@ -11,6 +16,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuBadge,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarSeparator,
+} from "@/components/ui/sidebar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DeviceCard } from "@/components/devices/DeviceCard";
 import {
@@ -38,6 +57,13 @@ interface DevicesProps {
 
 function canScan(unit: DaemonUnit) {
   return unit.present && unit.capabilities.includes("ble-scan");
+}
+
+function fingerprintLabel(stableId: string) {
+  if (stableId.startsWith("fp:")) {
+    return stableId.slice(0, 15);
+  }
+  return stableId.length > 18 ? `${stableId.slice(0, 18)}...` : stableId;
 }
 
 function EmptyState({
@@ -82,12 +108,10 @@ export function Devices({ units, bleDevices, blePackets, scanning }: DevicesProp
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [selectedPacketId, setSelectedPacketId] = useState<string | null>(null);
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
+  const [selectedStableId, setSelectedStableId] = useState<string | null>(null);
   const rssiWindows = useRef<Map<string, number[]>>(new Map());
 
-  const scannableUnits = useMemo(
-    () => units.filter(canScan),
-    [units]
-  );
+  const scannableUnits = useMemo(() => units.filter(canScan), [units]);
 
   const selectedUnit = useMemo(
     () => scannableUnits.find((unit) => unit.id === selectedUnitId) ?? null,
@@ -121,108 +145,15 @@ export function Devices({ units, bleDevices, blePackets, scanning }: DevicesProp
     return blePackets.filter((packet) => packet.unit_id === selectedUnitId);
   }, [blePackets, selectedUnitId]);
 
-  const recentPackets = useMemo(
-    () => unitBlePackets.slice(-MAX_PACKETS_IN_VIEW).reverse(),
-    [unitBlePackets]
-  );
-
-  const observedFieldsByStableId = useMemo(() => {
-    const grouped = new Map<
-      string,
-      Map<
-        string,
-        {
-          key: string;
-          source: "adv" | "scan-response";
-          typeName: string;
-          typeHex: string;
-          summary: string;
-          hex: string;
-          count: number;
-          lastSeenMs: number;
-        }
-      >
-    >();
-
-    const ingestFields = (
-      stableId: string,
-      source: "adv" | "scan-response",
-      payload: number[],
-      timestampMs: number
-    ) => {
-      if (payload.length === 0) {
-        return;
-      }
-
-      let fields = grouped.get(stableId);
-      if (!fields) {
-        fields = new Map();
-        grouped.set(stableId, fields);
-      }
-
-      for (const field of parseAdvertisementStructures(payload)) {
-        const typeHex = field.type >= 0
-          ? `0x${field.type.toString(16).padStart(2, "0").toUpperCase()}`
-          : "0x??";
-        const key = `${source}:${typeHex}:${field.hex}`;
-        const existing = fields.get(key);
-        if (existing) {
-          existing.count += 1;
-          existing.lastSeenMs = Math.max(existing.lastSeenMs, timestampMs);
-          continue;
-        }
-
-        fields.set(key, {
-          key,
-          source,
-          typeName: field.typeName,
-          typeHex,
-          summary: field.summary,
-          hex: field.hex,
-          count: 1,
-          lastSeenMs: timestampMs,
-        });
-      }
-    };
-
-    for (const packet of unitBlePackets) {
-      ingestFields(packet.stable_id, "adv", packet.raw_data, packet.timestamp_ms);
-      ingestFields(packet.stable_id, "scan-response", packet.raw_scan_response, packet.timestamp_ms);
-    }
-
-    return new Map(
-      [...grouped.entries()].map(([stableId, fields]) => [
-        stableId,
-        [...fields.values()]
-          .sort((a, b) =>
-            b.lastSeenMs - a.lastSeenMs
-            || b.count - a.count
-            || a.typeName.localeCompare(b.typeName)
-            || a.hex.localeCompare(b.hex)
-          )
-          .map((field) => ({
-            ...field,
-            lastSeenIso: new Date(field.lastSeenMs).toISOString(),
-          })),
-      ])
-    );
-  }, [unitBlePackets]);
-
   useEffect(() => {
-    if (recentPackets.length === 0) {
-      setSelectedPacketId(null);
+    if (!selectedStableId) {
       return;
     }
 
-    if (!selectedPacketId || !recentPackets.some((packet) => packet.id === selectedPacketId)) {
-      setSelectedPacketId(recentPackets[0]?.id ?? null);
+    if (!unitBleDevices.some((device) => device.stable_id === selectedStableId)) {
+      setSelectedStableId(null);
     }
-  }, [recentPackets, selectedPacketId]);
-
-  const selectedPacket = useMemo(
-    () => recentPackets.find((packet) => packet.id === selectedPacketId) ?? null,
-    [recentPackets, selectedPacketId]
-  );
+  }, [selectedStableId, unitBleDevices]);
 
   const packetCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -302,14 +233,131 @@ export function Devices({ units, bleDevices, blePackets, scanning }: DevicesProp
         return a.firstSeenAt - b.firstSeenAt;
       }
 
-      return a.id.localeCompare(b.id);
+      return a.stable_id.localeCompare(b.stable_id);
     });
   }, [firstSeenAt, packetCounts, strongestRssi, unitBleDevices]);
+
+  const focusedDevices = useMemo(() => {
+    if (!selectedStableId) {
+      return sortedDevices;
+    }
+    return sortedDevices.filter((device) => device.stable_id === selectedStableId);
+  }, [selectedStableId, sortedDevices]);
+
+  const focusedPackets = useMemo(() => {
+    if (!selectedStableId) {
+      return unitBlePackets;
+    }
+    return unitBlePackets.filter((packet) => packet.stable_id === selectedStableId);
+  }, [selectedStableId, unitBlePackets]);
+
+  const recentPackets = useMemo(
+    () => focusedPackets.slice(-MAX_PACKETS_IN_VIEW).reverse(),
+    [focusedPackets]
+  );
+
+  const observedFieldsByStableId = useMemo(() => {
+    const grouped = new Map<
+      string,
+      Map<
+        string,
+        {
+          key: string;
+          source: "adv" | "scan-response";
+          typeName: string;
+          typeHex: string;
+          summary: string;
+          hex: string;
+          count: number;
+          lastSeenMs: number;
+        }
+      >
+    >();
+
+    const ingestFields = (
+      stableId: string,
+      source: "adv" | "scan-response",
+      payload: number[],
+      timestampMs: number
+    ) => {
+      if (payload.length === 0) {
+        return;
+      }
+
+      let fields = grouped.get(stableId);
+      if (!fields) {
+        fields = new Map();
+        grouped.set(stableId, fields);
+      }
+
+      for (const field of parseAdvertisementStructures(payload)) {
+        const typeHex = field.type >= 0
+          ? `0x${field.type.toString(16).padStart(2, "0").toUpperCase()}`
+          : "0x??";
+        const key = `${source}:${typeHex}:${field.hex}`;
+        const existing = fields.get(key);
+        if (existing) {
+          existing.count += 1;
+          existing.lastSeenMs = Math.max(existing.lastSeenMs, timestampMs);
+          continue;
+        }
+
+        fields.set(key, {
+          key,
+          source,
+          typeName: field.typeName,
+          typeHex,
+          summary: field.summary,
+          hex: field.hex,
+          count: 1,
+          lastSeenMs: timestampMs,
+        });
+      }
+    };
+
+    for (const packet of focusedPackets) {
+      ingestFields(packet.stable_id, "adv", packet.raw_data, packet.timestamp_ms);
+      ingestFields(packet.stable_id, "scan-response", packet.raw_scan_response, packet.timestamp_ms);
+    }
+
+    return new Map(
+      [...grouped.entries()].map(([stableId, fields]) => [
+        stableId,
+        [...fields.values()]
+          .sort((a, b) =>
+            b.lastSeenMs - a.lastSeenMs
+            || b.count - a.count
+            || a.typeName.localeCompare(b.typeName)
+            || a.hex.localeCompare(b.hex)
+          )
+          .map((field) => ({
+            ...field,
+            lastSeenIso: new Date(field.lastSeenMs).toISOString(),
+          })),
+      ])
+    );
+  }, [focusedPackets]);
+
+  useEffect(() => {
+    if (recentPackets.length === 0) {
+      setSelectedPacketId(null);
+      return;
+    }
+
+    if (!selectedPacketId || !recentPackets.some((packet) => packet.id === selectedPacketId)) {
+      setSelectedPacketId(recentPackets[0]?.id ?? null);
+    }
+  }, [recentPackets, selectedPacketId]);
+
+  const selectedPacket = useMemo(
+    () => recentPackets.find((packet) => packet.id === selectedPacketId) ?? null,
+    [recentPackets, selectedPacketId]
+  );
 
   const serviceSummary = useMemo(() => {
     const counts = new Map<string, number>();
 
-    for (const device of unitBleDevices) {
+    for (const device of focusedDevices) {
       const uniqueServices = new Set(device.services.map((service) => service.toLowerCase()));
       for (const service of uniqueServices) {
         counts.set(service, (counts.get(service) ?? 0) + 1);
@@ -324,12 +372,12 @@ export function Devices({ units, bleDevices, blePackets, scanning }: DevicesProp
         isStandard: isStandardUuid(uuid),
       }))
       .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
-  }, [unitBleDevices]);
+  }, [focusedDevices]);
 
   const companySummary = useMemo(() => {
     const counts = new Map<number, number>();
 
-    for (const packet of unitBlePackets) {
+    for (const packet of focusedPackets) {
       if (packet.company_id != null) {
         counts.set(packet.company_id, (counts.get(packet.company_id) ?? 0) + 1);
       }
@@ -342,15 +390,15 @@ export function Devices({ units, bleDevices, blePackets, scanning }: DevicesProp
         count,
       }))
       .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
-  }, [unitBlePackets]);
+  }, [focusedPackets]);
 
   const uniqueServicesCount = serviceSummary.length;
-  const namedDevicesCount = unitBleDevices.filter((device) => device.name !== "Unknown").length;
+  const namedDevicesCount = focusedDevices.filter((device) => device.name !== "Unknown").length;
   const packetRate = useMemo(() => {
     const now = Date.now();
-    const recent = unitBlePackets.filter((packet) => now - packet.timestamp_ms <= 10_000);
+    const recent = focusedPackets.filter((packet) => now - packet.timestamp_ms <= 10_000);
     return recent.length / 10;
-  }, [unitBlePackets]);
+  }, [focusedPackets]);
 
   const timelineBuckets = useMemo(() => {
     const now = Date.now();
@@ -361,7 +409,7 @@ export function Devices({ units, bleDevices, blePackets, scanning }: DevicesProp
       namedCount: 0,
     }));
 
-    for (const packet of unitBlePackets) {
+    for (const packet of focusedPackets) {
       const age = now - packet.timestamp_ms;
       if (age < 0 || age > TIMELINE_WINDOW_MS) {
         continue;
@@ -378,29 +426,35 @@ export function Devices({ units, bleDevices, blePackets, scanning }: DevicesProp
     }
 
     return buckets;
-  }, [unitBlePackets]);
+  }, [focusedPackets]);
 
   const maxBucketCount = Math.max(...timelineBuckets.map((bucket) => bucket.count), 1);
+  const focusedDevice = selectedStableId != null ? focusedDevices[0] ?? null : null;
 
   if (!selectedUnit) {
     return <EmptyState scanning={scanning} selectedUnit={selectedUnit} />;
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4 px-4 py-4 md:px-6">
-      <Card className="border-border/60">
-        <CardHeader className="gap-3 md:flex-row md:items-start md:justify-between">
+    <SidebarProvider
+      defaultOpen
+      className="h-full min-h-0"
+      style={{ "--sidebar-width": "22rem" } as React.CSSProperties}
+    >
+      <Sidebar collapsible="none" className="border-r border-sidebar-border/70">
+        <SidebarHeader className="gap-3 border-b border-sidebar-border/70 p-4">
           <div>
-            <CardTitle className="text-base">
-              Scan Diagnostics
-            </CardTitle>
-            <CardDescription>
-              {selectedUnit.product || selectedUnit.kind} on {selectedUnit.id}
-            </CardDescription>
+            <p className="text-sm font-semibold text-sidebar-foreground">Scan Devices</p>
+            <p className="text-xs text-sidebar-foreground/70">
+              Fingerprinted device index for the selected scan unit.
+            </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="space-y-2">
+            <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-sidebar-foreground/60">
+              Scan Unit
+            </span>
             <Select value={selectedUnitId ?? undefined} onValueChange={setSelectedUnitId}>
-              <SelectTrigger className="h-8 min-w-64 bg-background" size="sm">
+              <SelectTrigger className="w-full bg-background">
                 <SelectValue placeholder="Select unit" />
               </SelectTrigger>
               <SelectContent>
@@ -411,366 +465,885 @@ export function Devices({ units, bleDevices, blePackets, scanning }: DevicesProp
                 ))}
               </SelectContent>
             </Select>
-            <Badge variant="outline">{unitBleDevices.length} devices</Badge>
-            <Badge variant="outline">{unitBlePackets.length} packets</Badge>
-            <Badge variant="outline">{uniqueServicesCount} services</Badge>
-            <Badge variant={scanning ? "default" : "secondary"}>
-              {scanning ? `${packetRate.toFixed(1)} pkt/s` : "Idle"}
+          </div>
+          <div className="flex flex-wrap gap-2 text-xs">
+            <Badge variant="secondary">{unitBleDevices.length} devices</Badge>
+            <Badge variant="secondary">{unitBlePackets.length} packets</Badge>
+            <Badge variant={scanning ? "default" : "outline"}>
+              {scanning ? "Scanning" : "Idle"}
             </Badge>
           </div>
-        </CardHeader>
-      </Card>
+        </SidebarHeader>
 
-      <Tabs defaultValue="summary" className="min-h-0 flex-1">
-        <TabsList variant="line" className="w-full justify-start rounded-none border-b bg-transparent p-0">
-          <TabsTrigger value="summary" className="rounded-none px-4">Summary</TabsTrigger>
-          <TabsTrigger value="timeline" className="rounded-none px-4">Timeline</TabsTrigger>
-          <TabsTrigger value="packets" className="rounded-none px-4">Packets</TabsTrigger>
-        </TabsList>
+        <SidebarContent>
+          <SidebarGroup className="gap-2">
+            <SidebarGroupLabel>Detected Devices</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    isActive={selectedStableId == null}
+                    onClick={() => setSelectedStableId(null)}
+                    tooltip="Show all detected devices"
+                  >
+                    <Bluetooth />
+                    <span>All Devices</span>
+                  </SidebarMenuButton>
+                  <SidebarMenuBadge>{unitBleDevices.length}</SidebarMenuBadge>
+                </SidebarMenuItem>
+                {sortedDevices.map((device) => (
+                  <SidebarMenuItem key={device.stable_id}>
+                    <SidebarMenuButton
+                      isActive={selectedStableId === device.stable_id}
+                      onClick={() => setSelectedStableId(device.stable_id)}
+                      className="h-auto items-start py-2"
+                      tooltip={device.stable_id}
+                    >
+                      <Fingerprint className="mt-0.5" />
+                      <span className="flex min-w-0 flex-1 flex-col">
+                        <span className="truncate text-sm">
+                          {device.name !== "Unknown" ? device.name : fingerprintLabel(device.stable_id)}
+                        </span>
+                        <span className="truncate font-mono text-[11px] text-sidebar-foreground/60">
+                          {device.stable_id}
+                        </span>
+                        <span className="truncate text-[11px] text-sidebar-foreground/60">
+                          strongest {device.strongestRssi} dBm
+                        </span>
+                      </span>
+                    </SidebarMenuButton>
+                    <SidebarMenuBadge>{device.packetCount}</SidebarMenuBadge>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+              {sortedDevices.length === 0 && (
+                <p className="px-2 py-3 text-sm text-sidebar-foreground/60">
+                  No devices retained for this unit yet.
+                </p>
+              )}
+            </SidebarGroupContent>
+          </SidebarGroup>
+        </SidebarContent>
 
-        <TabsContent value="summary" className="min-h-0 flex-1 pt-4">
-          <div className="grid h-full min-h-0 gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.95fr)]">
-            <Card className="min-h-0">
-              <CardHeader>
-                <CardTitle>Detected Devices</CardTitle>
-                <CardDescription>
-                  Current deduplicated view for the selected scanning unit.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="min-h-0">
-                <ScrollArea className="h-[calc(100vh-22rem)] xl:h-[calc(100vh-19rem)]">
-                  <div className="space-y-3 pr-4">
-                    {sortedDevices.map((device) => (
-                      <div key={device.stable_id} className="space-y-2">
-                        <DeviceCard
-                          device={device}
-                          expanded={expandedIds.has(device.stable_id)}
-                          observedFields={observedFieldsByStableId.get(device.stable_id)}
-                          onToggle={() =>
-                            setExpandedIds((prev) => {
-                              const next = new Set(prev);
-                              if (next.has(device.stable_id)) next.delete(device.stable_id);
-                              else next.add(device.stable_id);
-                              return next;
-                            })
-                          }
-                        />
-                        <div className="flex flex-wrap gap-2 pl-3 text-xs text-muted-foreground">
-                          <span>{device.packetCount} packets</span>
-                          <span>strongest {device.strongestRssi} dBm</span>
-                          <span>last seen {relativeTime(device.last_seen)}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </ScrollArea>
-              </CardContent>
-            </Card>
+        <SidebarSeparator />
+      </Sidebar>
 
-            <div className="grid min-h-0 gap-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Coverage</CardTitle>
-                  <CardDescription>Quick health view of the current scan window.</CardDescription>
-                </CardHeader>
-                <CardContent className="grid grid-cols-2 gap-3 text-sm">
-                  <MetricCard label="Named Devices" value={namedDevicesCount} />
-                  <MetricCard label="Unnamed Devices" value={unitBleDevices.length - namedDevicesCount} />
-                  <MetricCard label="Unique Services" value={uniqueServicesCount} />
-                  <MetricCard label="Recent Packets" value={unitBlePackets.filter((packet) => Date.now() - packet.timestamp_ms <= 30_000).length} />
-                </CardContent>
-              </Card>
-
-              <Card className="min-h-0">
-                <CardHeader>
-                  <CardTitle>Service Inventory</CardTitle>
-                  <CardDescription>Services currently visible across deduplicated devices.</CardDescription>
-                </CardHeader>
-                <CardContent className="min-h-0">
-                  <ScrollArea className="h-48">
-                    <div className="space-y-2 pr-4">
-                      {serviceSummary.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">No services decoded yet.</p>
-                      ) : (
-                        serviceSummary.map((service) => (
-                          <div key={service.uuid} className="flex items-start justify-between gap-3 rounded-md border border-border/60 px-3 py-2">
-                            <div className="min-w-0">
-                              <p className="truncate text-sm font-medium">{service.label}</p>
-                              <p className="truncate font-mono text-xs text-muted-foreground">{service.uuid}</p>
-                            </div>
-                            <div className="flex shrink-0 items-center gap-2">
-                              <Badge variant={service.isStandard ? "secondary" : "outline"}>
-                                {service.isStandard ? "SIG" : "Custom"}
-                              </Badge>
-                              <span className="text-sm text-muted-foreground">{service.count}</span>
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </ScrollArea>
-                </CardContent>
-              </Card>
-
-              <Card className="min-h-0">
-                <CardHeader>
-                  <CardTitle>Vendors on Air</CardTitle>
-                  <CardDescription>Manufacturer identifiers seen in the live packet stream.</CardDescription>
-                </CardHeader>
-                <CardContent className="min-h-0">
-                  <ScrollArea className="h-48">
-                    <div className="space-y-2 pr-4">
-                      {companySummary.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">No manufacturer data seen yet.</p>
-                      ) : (
-                        companySummary.map((company) => (
-                          <div key={company.companyId} className="flex items-center justify-between rounded-md border border-border/60 px-3 py-2">
-                            <div>
-                              <p className="text-sm font-medium">{company.label}</p>
-                              <p className="font-mono text-xs text-muted-foreground">
-                                0x{company.companyId.toString(16).padStart(4, "0").toUpperCase()}
-                              </p>
-                            </div>
-                            <span className="text-sm text-muted-foreground">{company.count} packets</span>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </ScrollArea>
-                </CardContent>
-              </Card>
+      <div className="flex h-full min-h-0 flex-1 flex-col gap-4 px-4 py-4 md:px-6">
+        <Card className="border-border/60">
+          <CardHeader className="gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <CardTitle className="text-base">
+                Scan Diagnostics
+              </CardTitle>
+              <CardDescription>
+                {selectedUnit.product || selectedUnit.kind} on {selectedUnit.id}
+              </CardDescription>
             </div>
-          </div>
-        </TabsContent>
+            <div className="flex flex-wrap items-center gap-2">
+              {selectedStableId ? (
+                <Badge variant="outline">
+                  Focused: {fingerprintLabel(selectedStableId)}
+                </Badge>
+              ) : (
+                <Badge variant="outline">Focused: all devices</Badge>
+              )}
+              <Badge variant="outline">{focusedDevices.length} devices</Badge>
+              <Badge variant="outline">{focusedPackets.length} packets</Badge>
+              <Badge variant="outline">{uniqueServicesCount} services</Badge>
+              <Badge variant={scanning ? "default" : "secondary"}>
+                {scanning ? `${packetRate.toFixed(1)} pkt/s` : "Idle"}
+              </Badge>
+            </div>
+          </CardHeader>
+        </Card>
 
-        <TabsContent value="timeline" className="min-h-0 flex-1 pt-4">
-          <div className="grid h-full min-h-0 gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(360px,0.8fr)]">
-            <Card className="min-h-0">
-              <CardHeader>
-                <CardTitle>Packet Arrival Timeline</CardTitle>
-                <CardDescription>
-                  Packet density over the last {TIMELINE_WINDOW_MS / 1000} seconds.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="flex h-full min-h-0 flex-col gap-6">
-                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                  <MetricCard label="Peak Bucket" value={maxBucketCount} />
-                  <MetricCard label="Average Rate" value={`${packetRate.toFixed(1)}/s`} />
-                  <MetricCard label="Last Packet" value={recentPackets[0] ? relativeTime(new Date(recentPackets[0].timestamp_ms).toISOString()) : "n/a"} />
-                  <MetricCard label="Timeline Samples" value={timelineBuckets.reduce((sum, bucket) => sum + bucket.count, 0)} />
+        {focusedDevices.length === 0 && focusedPackets.length === 0 ? (
+          <EmptyState scanning={scanning} selectedUnit={selectedUnit} />
+        ) : focusedDevice ? (
+          <DeviceFocusView
+            device={focusedDevice}
+            packets={recentPackets}
+            selectedPacket={selectedPacket}
+            onSelectPacket={setSelectedPacketId}
+            observedFields={observedFieldsByStableId.get(focusedDevice.stable_id) ?? []}
+          />
+        ) : (
+          <Tabs defaultValue="summary" className="min-h-0 flex-1">
+            <TabsList variant="line" className="w-full justify-start rounded-none border-b bg-transparent p-0">
+              <TabsTrigger value="summary" className="rounded-none px-4">Summary</TabsTrigger>
+              <TabsTrigger value="timeline" className="rounded-none px-4">Timeline</TabsTrigger>
+              <TabsTrigger value="packets" className="rounded-none px-4">Packets</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="summary" className="min-h-0 flex-1 pt-4">
+              <div className="grid h-full min-h-0 gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.95fr)]">
+                <Card className="min-h-0">
+                  <CardHeader>
+                    <CardTitle>Detected Devices</CardTitle>
+                    <CardDescription>
+                      {selectedStableId
+                        ? "Focused view for the selected fingerprinted device."
+                        : "Current deduplicated view for the selected scanning unit."}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="min-h-0">
+                    <ScrollArea className="h-[calc(100vh-22rem)] xl:h-[calc(100vh-19rem)]">
+                      <div className="space-y-3 pr-4">
+                        {focusedDevices.map((device) => (
+                          <div key={device.stable_id} className="space-y-2">
+                            <DeviceCard
+                              device={device}
+                              expanded={expandedIds.has(device.stable_id)}
+                              observedFields={observedFieldsByStableId.get(device.stable_id)}
+                              onToggle={() =>
+                                setExpandedIds((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(device.stable_id)) next.delete(device.stable_id);
+                                  else next.add(device.stable_id);
+                                  return next;
+                                })
+                              }
+                            />
+                            <div className="flex flex-wrap gap-2 pl-3 text-xs text-muted-foreground">
+                              <span>{device.packetCount} packets</span>
+                              <span>strongest {device.strongestRssi} dBm</span>
+                              <span>last seen {relativeTime(device.last_seen)}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  </CardContent>
+                </Card>
+
+                <div className="grid min-h-0 gap-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Coverage</CardTitle>
+                      <CardDescription>Quick health view of the current scan window.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="grid grid-cols-2 gap-3 text-sm">
+                      <MetricCard label="Named Devices" value={namedDevicesCount} />
+                      <MetricCard label="Unnamed Devices" value={focusedDevices.length - namedDevicesCount} />
+                      <MetricCard label="Unique Services" value={uniqueServicesCount} />
+                      <MetricCard label="Recent Packets" value={focusedPackets.filter((packet) => Date.now() - packet.timestamp_ms <= 30_000).length} />
+                    </CardContent>
+                  </Card>
+
+                  <Card className="min-h-0">
+                    <CardHeader>
+                      <CardTitle>Service Inventory</CardTitle>
+                      <CardDescription>Services currently visible across the focused device set.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="min-h-0">
+                      <ScrollArea className="h-48">
+                        <div className="space-y-2 pr-4">
+                          {serviceSummary.length === 0 ? (
+                            <p className="text-sm text-muted-foreground">No services decoded yet.</p>
+                          ) : (
+                            serviceSummary.map((service) => (
+                              <div key={service.uuid} className="flex items-start justify-between gap-3 rounded-md border border-border/60 px-3 py-2">
+                                <div className="min-w-0">
+                                  <p className="truncate text-sm font-medium">{service.label}</p>
+                                  <p className="truncate font-mono text-xs text-muted-foreground">{service.uuid}</p>
+                                </div>
+                                <div className="flex shrink-0 items-center gap-2">
+                                  <Badge variant={service.isStandard ? "secondary" : "outline"}>
+                                    {service.isStandard ? "SIG" : "Custom"}
+                                  </Badge>
+                                  <span className="text-sm text-muted-foreground">{service.count}</span>
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </ScrollArea>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="min-h-0">
+                    <CardHeader>
+                      <CardTitle>Vendors on Air</CardTitle>
+                      <CardDescription>Manufacturer identifiers seen in the focused packet stream.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="min-h-0">
+                      <ScrollArea className="h-48">
+                        <div className="space-y-2 pr-4">
+                          {companySummary.length === 0 ? (
+                            <p className="text-sm text-muted-foreground">No manufacturer data seen yet.</p>
+                          ) : (
+                            companySummary.map((company) => (
+                              <div key={company.companyId} className="flex items-center justify-between rounded-md border border-border/60 px-3 py-2">
+                                <div>
+                                  <p className="text-sm font-medium">{company.label}</p>
+                                  <p className="font-mono text-xs text-muted-foreground">
+                                    0x{company.companyId.toString(16).padStart(4, "0").toUpperCase()}
+                                  </p>
+                                </div>
+                                <span className="text-sm text-muted-foreground">{company.count} packets</span>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </ScrollArea>
+                    </CardContent>
+                  </Card>
                 </div>
+              </div>
+            </TabsContent>
 
-                <div className="flex min-h-[14rem] items-end gap-2 rounded-lg border border-border/60 bg-muted/20 p-4">
-                  {timelineBuckets.map((bucket, index) => {
-                    const height = Math.max(8, (bucket.count / maxBucketCount) * 100);
-                    return (
-                      <div key={`${bucket.label}-${index}`} className="flex flex-1 flex-col items-center gap-2">
-                        <div className="text-[10px] text-muted-foreground">{bucket.count}</div>
-                        <div className="relative flex w-full flex-1 items-end">
-                          <div
-                            className="w-full rounded-t-md bg-foreground/85 transition-[height]"
-                            style={{ height: `${height}%` }}
+            <TabsContent value="timeline" className="min-h-0 flex-1 pt-4">
+              <div className="grid h-full min-h-0 gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(360px,0.8fr)]">
+                <Card className="min-h-0">
+                  <CardHeader>
+                    <CardTitle>Packet Arrival Timeline</CardTitle>
+                    <CardDescription>
+                      Packet density over the last {TIMELINE_WINDOW_MS / 1000} seconds.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="flex h-full min-h-0 flex-col gap-6">
+                    <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                      <MetricCard label="Peak Bucket" value={maxBucketCount} />
+                      <MetricCard label="Average Rate" value={`${packetRate.toFixed(1)}/s`} />
+                      <MetricCard label="Last Packet" value={recentPackets[0] ? relativeTime(new Date(recentPackets[0].timestamp_ms).toISOString()) : "n/a"} />
+                      <MetricCard label="Timeline Samples" value={timelineBuckets.reduce((sum, bucket) => sum + bucket.count, 0)} />
+                    </div>
+
+                    <div className="flex min-h-[14rem] items-end gap-2 rounded-lg border border-border/60 bg-muted/20 p-4">
+                      {timelineBuckets.map((bucket, index) => {
+                        const height = Math.max(8, (bucket.count / maxBucketCount) * 100);
+                        return (
+                          <div key={`${bucket.label}-${index}`} className="flex flex-1 flex-col items-center gap-2">
+                            <div className="text-[10px] text-muted-foreground">{bucket.count}</div>
+                            <div className="relative flex w-full flex-1 items-end">
+                              <div
+                                className="w-full rounded-t-md bg-foreground/85 transition-[height]"
+                                style={{ height: `${height}%` }}
+                              />
+                              {bucket.namedCount > 0 && (
+                                <div
+                                  className="absolute inset-x-[18%] bottom-0 rounded-t-md bg-emerald-400/70"
+                                  style={{ height: `${Math.max(6, (bucket.namedCount / maxBucketCount) * 100)}%` }}
+                                />
+                              )}
+                            </div>
+                            <div className="text-[10px] text-muted-foreground">
+                              -{Math.round(((TIMELINE_BUCKETS - index - 1) * TIMELINE_WINDOW_MS) / TIMELINE_BUCKETS / 1000)}s
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <p className="text-xs text-muted-foreground">
+                      Dark bars show total packets per bucket. Green overlays show packets where a name was present in the received advertisement.
+                    </p>
+                  </CardContent>
+                </Card>
+
+                <Card className="min-h-0">
+                  <CardHeader>
+                    <CardTitle>Recent Packet Feed</CardTitle>
+                    <CardDescription>Arrival order for the newest packets in the current focus.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="min-h-0">
+                    <ScrollArea className="h-[calc(100vh-19rem)]">
+                      <div className="space-y-2 pr-4">
+                        {recentPackets.map((packet) => (
+                          <div key={packet.id} className="rounded-md border border-border/60 px-3 py-2">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-medium">
+                                  {packet.name !== "Unknown" ? packet.name : packet.device_id}
+                                </p>
+                                <p className="truncate font-mono text-xs text-muted-foreground">
+                                  {packet.device_id}
+                                </p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-sm font-medium">{packet.rssi} dBm</p>
+                                <p className="text-xs text-muted-foreground">{formatPacketTimestamp(packet.timestamp_ms)}</p>
+                              </div>
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                              {packet.company_id != null && (
+                                <Badge variant="outline">
+                                  {resolveCompanyName(packet.company_id) ?? "Unknown"} · 0x{packet.company_id.toString(16).padStart(4, "0").toUpperCase()}
+                                </Badge>
+                              )}
+                              {packet.service_uuids.slice(0, 2).map((uuid) => (
+                                <Badge key={uuid} variant="secondary">
+                                  {resolveServiceName(uuid)}
+                                </Badge>
+                              ))}
+                              <span>{packet.raw_data.length} B payload</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  </CardContent>
+                </Card>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="packets" className="min-h-0 flex-1 pt-4">
+              <div className="grid h-full min-h-0 gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)]">
+                <Card className="min-h-0">
+                  <CardHeader>
+                    <CardTitle>Packet Stream</CardTitle>
+                    <CardDescription>
+                      Live packet log for the current unit and device focus. Select a row to inspect the payload.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="min-h-0">
+                    <ScrollArea className="h-[calc(100vh-19rem)]">
+                      <div className="space-y-2 pr-4">
+                        {recentPackets.map((packet) => (
+                          <button
+                            key={packet.id}
+                            type="button"
+                            onClick={() => setSelectedPacketId(packet.id)}
+                            className={`w-full rounded-lg border px-3 py-3 text-left transition-colors ${
+                              selectedPacketId === packet.id
+                                ? "border-foreground/40 bg-accent"
+                                : "border-border/60 hover:border-foreground/20 hover:bg-accent/40"
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-medium">
+                                  {packet.name !== "Unknown" ? packet.name : "(unknown)"}{" "}
+                                  <span className="font-mono text-muted-foreground">{packet.device_id}</span>
+                                </p>
+                                <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                                  <span>{formatPacketTimestamp(packet.timestamp_ms)}</span>
+                                  <span>{packet.address_type || "addr type unknown"}</span>
+                                  <span>adv type {packet.adv_type}</span>
+                                  <span>{packet.raw_data.length} B</span>
+                                </div>
+                              </div>
+                              <div className="shrink-0 text-right">
+                                <p className="text-sm font-medium">{packet.rssi} dBm</p>
+                                <p className="text-xs text-muted-foreground">SID {packet.sid}</p>
+                              </div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  </CardContent>
+                </Card>
+
+                <Card className="min-h-0">
+                  <CardHeader>
+                    <CardTitle>Packet Inspector</CardTitle>
+                    <CardDescription>
+                      Raw payloads, decoded AD structures, and radio metadata for the selected packet.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="min-h-0">
+                    {selectedPacket ? (
+                      <ScrollArea className="h-[calc(100vh-19rem)]">
+                        <div className="space-y-4 pr-4">
+                          <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                              <div>
+                                <p className="text-sm font-medium">
+                                  {selectedPacket.name !== "Unknown" ? selectedPacket.name : selectedPacket.device_id}
+                                </p>
+                                <p className="font-mono text-xs text-muted-foreground">{selectedPacket.device_id}</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-sm font-medium">{selectedPacket.rssi} dBm</p>
+                                <p className="text-xs text-muted-foreground">{formatPacketTimestamp(selectedPacket.timestamp_ms)}</p>
+                              </div>
+                            </div>
+                            <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                              <MetaPill label="Addr Type" value={selectedPacket.address_type || "unknown"} />
+                              <MetaPill label="SID" value={selectedPacket.sid} />
+                              <MetaPill label="Adv Type" value={selectedPacket.adv_type} />
+                              <MetaPill label="Adv Props" value={`0x${selectedPacket.adv_props.toString(16).toUpperCase()}`} />
+                              <MetaPill label="Interval" value={selectedPacket.interval} />
+                              <MetaPill label="Primary PHY" value={selectedPacket.primary_phy} />
+                              <MetaPill label="Secondary PHY" value={selectedPacket.secondary_phy} />
+                              <MetaPill label="Tx Power" value={selectedPacket.tx_power ?? "unknown"} />
+                            </div>
+                          </div>
+
+                          <PacketPayloadSection
+                            title="Advertising Payload"
+                            description={`${selectedPacket.raw_data.length} bytes`}
+                            bytes={selectedPacket.raw_data}
                           />
-                          {bucket.namedCount > 0 && (
-                            <div
-                              className="absolute inset-x-[18%] bottom-0 rounded-t-md bg-emerald-400/70"
-                              style={{ height: `${Math.max(6, (bucket.namedCount / maxBucketCount) * 100)}%` }}
+
+                          {selectedPacket.raw_scan_response.length > 0 && (
+                            <PacketPayloadSection
+                              title="Scan Response"
+                              description={`${selectedPacket.raw_scan_response.length} bytes`}
+                              bytes={selectedPacket.raw_scan_response}
                             />
                           )}
-                        </div>
-                        <div className="text-[10px] text-muted-foreground">
-                          -{Math.round(((TIMELINE_BUCKETS - index - 1) * TIMELINE_WINDOW_MS) / TIMELINE_BUCKETS / 1000)}s
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
 
-                <p className="text-xs text-muted-foreground">
-                  Dark bars show total packets per bucket. Green overlays show packets where a name was present in the received advertisement.
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="min-h-0">
-              <CardHeader>
-                <CardTitle>Recent Packet Feed</CardTitle>
-                <CardDescription>Arrival order for the newest packets on this unit.</CardDescription>
-              </CardHeader>
-              <CardContent className="min-h-0">
-                <ScrollArea className="h-[calc(100vh-19rem)]">
-                  <div className="space-y-2 pr-4">
-                    {recentPackets.map((packet) => (
-                      <div key={packet.id} className="rounded-md border border-border/60 px-3 py-2">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-medium">
-                              {packet.name !== "Unknown" ? packet.name : packet.device_id}
-                            </p>
-                            <p className="truncate font-mono text-xs text-muted-foreground">
-                              {packet.device_id}
-                            </p>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-sm font-medium">{packet.rssi} dBm</p>
-                            <p className="text-xs text-muted-foreground">{formatPacketTimestamp(packet.timestamp_ms)}</p>
-                          </div>
+                          <Card className="border-border/60">
+                            <CardHeader>
+                              <CardTitle>Decoded Fields</CardTitle>
+                              <CardDescription>
+                                Best-effort interpretation of AD structures in the selected packet.
+                              </CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-2">
+                              {parseAdvertisementStructures(selectedPacket.raw_data).map((field) => (
+                                <div key={`${field.offset}-${field.type}`} className="rounded-md border border-border/60 px-3 py-2">
+                                  <div className="flex items-center justify-between gap-3">
+                                    <p className="text-sm font-medium">{field.typeName}</p>
+                                    <span className="font-mono text-xs text-muted-foreground">
+                                      offset {field.offset} · len {field.length}
+                                    </span>
+                                  </div>
+                                  <p className="mt-1 text-sm text-muted-foreground">{field.summary}</p>
+                                  <p className="mt-1 font-mono text-xs text-muted-foreground">{field.hex || "No field data"}</p>
+                                </div>
+                              ))}
+                              {selectedPacket.raw_data.length === 0 && (
+                                <p className="text-sm text-muted-foreground">No raw payload available for this packet.</p>
+                              )}
+                            </CardContent>
+                          </Card>
                         </div>
-                        <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                          {packet.company_id != null && (
-                            <Badge variant="outline">
-                              {resolveCompanyName(packet.company_id) ?? "Unknown"} · 0x{packet.company_id.toString(16).padStart(4, "0").toUpperCase()}
-                            </Badge>
-                          )}
-                          {packet.service_uuids.slice(0, 2).map((uuid) => (
-                            <Badge key={uuid} variant="secondary">
-                              {resolveServiceName(uuid)}
-                            </Badge>
-                          ))}
-                          <span>{packet.raw_data.length} B payload</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </ScrollArea>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
+                      </ScrollArea>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">Select a packet to inspect it.</p>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            </TabsContent>
+          </Tabs>
+        )}
+      </div>
+    </SidebarProvider>
+  );
+}
 
-        <TabsContent value="packets" className="min-h-0 flex-1 pt-4">
-          <div className="grid h-full min-h-0 gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)]">
-            <Card className="min-h-0">
-              <CardHeader>
-                <CardTitle>Packet Stream</CardTitle>
-                <CardDescription>
-                  Live packet log for the selected unit. Select a row to inspect the payload.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="min-h-0">
-                <ScrollArea className="h-[calc(100vh-19rem)]">
-                  <div className="space-y-2 pr-4">
-                    {recentPackets.map((packet) => (
-                      <button
-                        key={packet.id}
-                        type="button"
-                        onClick={() => setSelectedPacketId(packet.id)}
-                        className={`w-full rounded-lg border px-3 py-3 text-left transition-colors ${
-                          selectedPacketId === packet.id
-                            ? "border-foreground/40 bg-accent"
-                            : "border-border/60 hover:border-foreground/20 hover:bg-accent/40"
-                        }`}
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-medium">
-                              {packet.name !== "Unknown" ? packet.name : "(unknown)"}{" "}
-                              <span className="font-mono text-muted-foreground">{packet.device_id}</span>
-                            </p>
-                            <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                              <span>{formatPacketTimestamp(packet.timestamp_ms)}</span>
-                              <span>{packet.address_type || "addr type unknown"}</span>
-                              <span>adv type {packet.adv_type}</span>
-                              <span>{packet.raw_data.length} B</span>
-                            </div>
-                          </div>
-                          <div className="shrink-0 text-right">
-                            <p className="text-sm font-medium">{packet.rssi} dBm</p>
-                            <p className="text-xs text-muted-foreground">SID {packet.sid}</p>
-                          </div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </ScrollArea>
-              </CardContent>
-            </Card>
+function DeviceFocusView({
+  device,
+  packets,
+  selectedPacket,
+  onSelectPacket,
+  observedFields,
+}: {
+  device: BleDevice & {
+    packetCount?: number;
+    strongestRssi?: number;
+  };
+  packets: BlePacket[];
+  selectedPacket: BlePacket | null;
+  onSelectPacket: (packetId: string) => void;
+  observedFields: {
+    key: string;
+    source: "adv" | "scan-response";
+    typeName: string;
+    typeHex: string;
+    summary: string;
+    hex: string;
+    count: number;
+    lastSeenIso: string;
+  }[];
+}) {
+  const companyId = device.manufacturer_data[0]?.company_id ?? null;
+  const companyLabel = companyId != null ? resolveCompanyName(companyId) : null;
+  const [selectedServiceUuid, setSelectedServiceUuid] = useState<string | null>(device.services[0] ?? null);
+  const [selectedIdentityKey, setSelectedIdentityKey] = useState<string>("fingerprint");
+  const [selectedFieldKey, setSelectedFieldKey] = useState<string | null>(observedFields[0]?.key ?? null);
 
-            <Card className="min-h-0">
-              <CardHeader>
-                <CardTitle>Packet Inspector</CardTitle>
-                <CardDescription>
-                  Raw payloads, decoded AD structures, and radio metadata for the selected packet.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="min-h-0">
-                {selectedPacket ? (
-                  <ScrollArea className="h-[calc(100vh-19rem)]">
-                    <div className="space-y-4 pr-4">
-                      <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                          <div>
-                            <p className="text-sm font-medium">
-                              {selectedPacket.name !== "Unknown" ? selectedPacket.name : selectedPacket.device_id}
-                            </p>
-                            <p className="font-mono text-xs text-muted-foreground">{selectedPacket.device_id}</p>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-sm font-medium">{selectedPacket.rssi} dBm</p>
-                            <p className="text-xs text-muted-foreground">{formatPacketTimestamp(selectedPacket.timestamp_ms)}</p>
-                          </div>
-                        </div>
-                        <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-                          <MetaPill label="Addr Type" value={selectedPacket.address_type || "unknown"} />
-                          <MetaPill label="SID" value={selectedPacket.sid} />
-                          <MetaPill label="Adv Type" value={selectedPacket.adv_type} />
-                          <MetaPill label="Adv Props" value={`0x${selectedPacket.adv_props.toString(16).toUpperCase()}`} />
-                          <MetaPill label="Interval" value={selectedPacket.interval} />
-                          <MetaPill label="Primary PHY" value={selectedPacket.primary_phy} />
-                          <MetaPill label="Secondary PHY" value={selectedPacket.secondary_phy} />
-                          <MetaPill label="Tx Power" value={selectedPacket.tx_power ?? "unknown"} />
-                        </div>
-                      </div>
+  const identityEntries = useMemo(() => ([
+    {
+      key: "fingerprint",
+      label: "Fingerprint",
+      value: device.stable_id,
+      detail: "Stable fingerprint key used to group rotating BLE identities into one retained device.",
+    },
+    {
+      key: "observed-id",
+      label: "Observed ID",
+      value: device.id,
+      detail: "Most recent retained device identifier shown in the observation stream.",
+    },
+    {
+      key: "manufacturer",
+      label: "Manufacturer",
+      value: companyId != null
+        ? `${companyLabel ?? "Unknown Company"} (0x${companyId.toString(16).padStart(4, "0").toUpperCase()})`
+        : "No manufacturer data",
+      detail: "Derived from manufacturer-specific AD structures retained for this device.",
+    },
+    {
+      key: "last-seen",
+      label: "Last Seen",
+      value: relativeTime(device.last_seen),
+      detail: "Relative timestamp of the most recent retained advertisement for this device.",
+    },
+  ]), [companyId, companyLabel, device.id, device.last_seen, device.stable_id]);
 
-                      <PacketPayloadSection
-                        title="Advertising Payload"
-                        description={`${selectedPacket.raw_data.length} bytes`}
-                        bytes={selectedPacket.raw_data}
-                      />
+  const selectedServiceUuidValue = selectedServiceUuid && device.services.includes(selectedServiceUuid)
+    ? selectedServiceUuid
+    : device.services[0] ?? null;
+  const selectedIdentity = identityEntries.find((entry) => entry.key === selectedIdentityKey) ?? identityEntries[0] ?? null;
+  const selectedField = observedFields.find((field) => field.key === selectedFieldKey) ?? observedFields[0] ?? null;
 
-                      {selectedPacket.raw_scan_response.length > 0 && (
-                        <PacketPayloadSection
-                          title="Scan Response"
-                          description={`${selectedPacket.raw_scan_response.length} bytes`}
-                          bytes={selectedPacket.raw_scan_response}
-                        />
-                      )}
+  useEffect(() => {
+    if (device.services.length === 0) {
+      if (selectedServiceUuid !== null) {
+        setSelectedServiceUuid(null);
+      }
+      return;
+    }
 
-                      <Card className="border-border/60">
-                        <CardHeader>
-                          <CardTitle>Decoded Fields</CardTitle>
-                          <CardDescription>
-                            Best-effort interpretation of AD structures in the selected packet.
-                          </CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-2">
-                          {parseAdvertisementStructures(selectedPacket.raw_data).map((field) => (
-                            <div key={`${field.offset}-${field.type}`} className="rounded-md border border-border/60 px-3 py-2">
-                              <div className="flex items-center justify-between gap-3">
-                                <p className="text-sm font-medium">{field.typeName}</p>
-                                <span className="font-mono text-xs text-muted-foreground">
-                                  offset {field.offset} · len {field.length}
-                                </span>
+    if (!selectedServiceUuid || !device.services.includes(selectedServiceUuid)) {
+      setSelectedServiceUuid(device.services[0] ?? null);
+    }
+  }, [device.services, selectedServiceUuid]);
+
+  useEffect(() => {
+    if (observedFields.length === 0) {
+      if (selectedFieldKey !== null) {
+        setSelectedFieldKey(null);
+      }
+      return;
+    }
+
+    if (!selectedFieldKey || !observedFields.some((field) => field.key === selectedFieldKey)) {
+      setSelectedFieldKey(observedFields[0]?.key ?? null);
+    }
+  }, [observedFields, selectedFieldKey]);
+
+  return (
+    <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)]">
+      <div className="grid min-h-0 gap-4">
+        <Card>
+          <CardHeader>
+            <CardTitle>{device.name !== "Unknown" ? device.name : "Unnamed Device"}</CardTitle>
+            <CardDescription>
+              Detailed diagnostic view for fingerprint <span className="font-mono">{device.stable_id}</span>
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <MetricCard label="Display ID" value={device.id} />
+            <MetricCard label="Packets Seen" value={device.packetCount ?? packets.length} />
+            <MetricCard label="Strongest RSSI" value={`${device.strongestRssi ?? device.rssi} dBm`} />
+            <MetricCard label="Last Seen" value={relativeTime(device.last_seen)} />
+          </CardContent>
+        </Card>
+
+        <Card className="min-h-0">
+          <CardHeader>
+            <CardTitle>Device Detail</CardTitle>
+            <CardDescription>
+              Select a service, identity record, or AD structure and inspect its retained detail below.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="min-h-0">
+            <Tabs defaultValue="services" className="min-h-0">
+              <TabsList variant="line" className="w-full justify-start rounded-none border-b bg-transparent p-0">
+                <TabsTrigger value="services" className="rounded-none px-4">Advertised Services</TabsTrigger>
+                <TabsTrigger value="identity" className="rounded-none px-4">Identity</TabsTrigger>
+                <TabsTrigger value="ad" className="rounded-none px-4">Observed AD Structures</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="services" className="min-h-0 pt-4">
+                <ResizablePanelGroup orientation="vertical" className="min-h-[28rem] rounded-lg border border-border/60">
+                  <ResizablePanel defaultSize={48} minSize={24}>
+                    <ScrollArea className="h-full">
+                      <div className="space-y-2 p-3">
+                        {device.services.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">No services retained for this device.</p>
+                        ) : (
+                          device.services.map((uuid) => (
+                            <button
+                              key={uuid}
+                              type="button"
+                              onClick={() => setSelectedServiceUuid(uuid)}
+                              className={`w-full rounded-md border px-3 py-2 text-left transition-colors ${
+                                selectedServiceUuidValue === uuid
+                                  ? "border-foreground/40 bg-accent"
+                                  : "border-border/60 hover:border-foreground/20 hover:bg-accent/40"
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <p className="truncate text-sm font-medium">{resolveServiceName(uuid)}</p>
+                                  <p className="truncate font-mono text-xs text-muted-foreground">{uuid}</p>
+                                </div>
+                                <Badge variant={isStandardUuid(uuid) ? "secondary" : "outline"}>
+                                  {isStandardUuid(uuid) ? "SIG" : "Custom"}
+                                </Badge>
                               </div>
-                              <p className="mt-1 text-sm text-muted-foreground">{field.summary}</p>
-                              <p className="mt-1 font-mono text-xs text-muted-foreground">{field.hex || "No field data"}</p>
-                            </div>
-                          ))}
-                          {selectedPacket.raw_data.length === 0 && (
-                            <p className="text-sm text-muted-foreground">No raw payload available for this packet.</p>
-                          )}
-                        </CardContent>
-                      </Card>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    </ScrollArea>
+                  </ResizablePanel>
+                  <ResizableHandle withHandle />
+                  <ResizablePanel defaultSize={52} minSize={24}>
+                    <div className="h-full p-4">
+                      {selectedServiceUuidValue ? (
+                        <div className="space-y-3">
+                          <div className="rounded-md border border-border/60 px-3 py-3">
+                            <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Service Name</p>
+                            <p className="mt-1 text-sm font-medium">{resolveServiceName(selectedServiceUuidValue)}</p>
+                          </div>
+                          <div className="rounded-md border border-border/60 px-3 py-3">
+                            <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">UUID</p>
+                            <p className="mt-1 break-all font-mono text-sm">{selectedServiceUuidValue}</p>
+                          </div>
+                          <div className="rounded-md border border-border/60 px-3 py-3">
+                            <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Classification</p>
+                            <p className="mt-1 text-sm">{isStandardUuid(selectedServiceUuidValue) ? "Bluetooth SIG base UUID" : "Custom / vendor UUID"}</p>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">Select a service to inspect it.</p>
+                      )}
                     </div>
-                  </ScrollArea>
-                ) : (
-                  <p className="text-sm text-muted-foreground">Select a packet to inspect it.</p>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-      </Tabs>
+                  </ResizablePanel>
+                </ResizablePanelGroup>
+              </TabsContent>
+
+              <TabsContent value="identity" className="min-h-0 pt-4">
+                <ResizablePanelGroup orientation="vertical" className="min-h-[28rem] rounded-lg border border-border/60">
+                  <ResizablePanel defaultSize={42} minSize={24}>
+                    <ScrollArea className="h-full">
+                      <div className="space-y-2 p-3">
+                        {identityEntries.map((entry) => (
+                          <button
+                            key={entry.key}
+                            type="button"
+                            onClick={() => setSelectedIdentityKey(entry.key)}
+                            className={`w-full rounded-md border px-3 py-2 text-left transition-colors ${
+                              selectedIdentity?.key === entry.key
+                                ? "border-foreground/40 bg-accent"
+                                : "border-border/60 hover:border-foreground/20 hover:bg-accent/40"
+                            }`}
+                          >
+                            <p className="text-sm font-medium">{entry.label}</p>
+                            <p className="mt-1 truncate text-xs text-muted-foreground">{entry.value}</p>
+                          </button>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  </ResizablePanel>
+                  <ResizableHandle withHandle />
+                  <ResizablePanel defaultSize={58} minSize={24}>
+                    <div className="h-full p-4">
+                      {selectedIdentity ? (
+                        <div className="space-y-3">
+                          <div className="rounded-md border border-border/60 px-3 py-3">
+                            <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">{selectedIdentity.label}</p>
+                            <p className="mt-1 break-all font-mono text-sm">{selectedIdentity.value}</p>
+                          </div>
+                          <div className="rounded-md border border-border/60 px-3 py-3">
+                            <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Meaning</p>
+                            <p className="mt-1 text-sm text-muted-foreground">{selectedIdentity.detail}</p>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">Select an identity field to inspect it.</p>
+                      )}
+                    </div>
+                  </ResizablePanel>
+                </ResizablePanelGroup>
+              </TabsContent>
+
+              <TabsContent value="ad" className="min-h-0 pt-4">
+                <ResizablePanelGroup orientation="vertical" className="min-h-[28rem] rounded-lg border border-border/60">
+                  <ResizablePanel defaultSize={48} minSize={24}>
+                    <ScrollArea className="h-full">
+                      <div className="space-y-2 p-3">
+                        {observedFields.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">No retained AD structures for this device yet.</p>
+                        ) : (
+                          observedFields.map((field) => (
+                            <button
+                              key={field.key}
+                              type="button"
+                              onClick={() => setSelectedFieldKey(field.key)}
+                              className={`w-full rounded-md border px-3 py-2 text-left transition-colors ${
+                                selectedField?.key === field.key
+                                  ? "border-foreground/40 bg-accent"
+                                  : "border-border/60 hover:border-foreground/20 hover:bg-accent/40"
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <p className="truncate text-sm font-medium">
+                                    {field.typeName}
+                                    <span className="ml-2 font-mono text-xs text-muted-foreground">{field.typeHex}</span>
+                                  </p>
+                                  <p className="mt-1 truncate text-xs text-muted-foreground">{field.summary}</p>
+                                </div>
+                                <span className="shrink-0 text-xs text-muted-foreground">{field.count}x</span>
+                              </div>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    </ScrollArea>
+                  </ResizablePanel>
+                  <ResizableHandle withHandle />
+                  <ResizablePanel defaultSize={52} minSize={24}>
+                    <div className="h-full p-4">
+                      {selectedField ? (
+                        <div className="space-y-3">
+                          <div className="rounded-md border border-border/60 px-3 py-3">
+                            <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">AD Type</p>
+                            <p className="mt-1 text-sm font-medium">
+                              {selectedField.typeName} <span className="font-mono text-xs text-muted-foreground">{selectedField.typeHex}</span>
+                            </p>
+                          </div>
+                          <div className="rounded-md border border-border/60 px-3 py-3">
+                            <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Decoded Summary</p>
+                            <p className="mt-1 text-sm text-muted-foreground">{selectedField.summary}</p>
+                          </div>
+                          <div className="rounded-md border border-border/60 px-3 py-3">
+                            <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Field Payload</p>
+                            <p className="mt-1 break-all font-mono text-xs text-muted-foreground">{selectedField.hex || "No field payload"}</p>
+                          </div>
+                          <div className="grid gap-3 md:grid-cols-3">
+                            <div className="rounded-md border border-border/60 px-3 py-3">
+                              <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Source</p>
+                              <p className="mt-1 text-sm">{selectedField.source}</p>
+                            </div>
+                            <div className="rounded-md border border-border/60 px-3 py-3">
+                              <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Seen</p>
+                              <p className="mt-1 text-sm">{selectedField.count} times</p>
+                            </div>
+                            <div className="rounded-md border border-border/60 px-3 py-3">
+                              <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Last Seen</p>
+                              <p className="mt-1 text-sm">{relativeTime(selectedField.lastSeenIso)}</p>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">Select an AD structure to inspect it.</p>
+                      )}
+                    </div>
+                  </ResizablePanel>
+                </ResizablePanelGroup>
+              </TabsContent>
+            </Tabs>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid min-h-0 gap-4">
+        <Card className="min-h-0">
+          <CardHeader>
+            <CardTitle>Recent Packets</CardTitle>
+            <CardDescription>Recent packet stream for this device only.</CardDescription>
+          </CardHeader>
+          <CardContent className="min-h-0">
+            <ScrollArea className="h-[calc(100vh-31rem)] min-h-72">
+              <div className="space-y-2 pr-4">
+                {packets.map((packet) => (
+                  <button
+                    key={packet.id}
+                    type="button"
+                    onClick={() => onSelectPacket(packet.id)}
+                    className={`w-full rounded-lg border px-3 py-3 text-left transition-colors ${
+                      selectedPacket?.id === packet.id
+                        ? "border-foreground/40 bg-accent"
+                        : "border-border/60 hover:border-foreground/20 hover:bg-accent/40"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">
+                          {packet.name !== "Unknown" ? packet.name : packet.device_id}
+                        </p>
+                        <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                          <span>{formatPacketTimestamp(packet.timestamp_ms)}</span>
+                          <span>{packet.address_type || "addr type unknown"}</span>
+                          <span>adv type {packet.adv_type}</span>
+                        </div>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className="text-sm font-medium">{packet.rssi} dBm</p>
+                        <p className="text-xs text-muted-foreground">{packet.raw_data.length} B</p>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </ScrollArea>
+          </CardContent>
+        </Card>
+
+        <Card className="min-h-0">
+          <CardHeader>
+            <CardTitle>Selected Packet</CardTitle>
+            <CardDescription>Raw payload and decoded AD fields for the highlighted packet.</CardDescription>
+          </CardHeader>
+          <CardContent className="min-h-0">
+            {selectedPacket ? (
+              <ScrollArea className="h-[calc(100vh-31rem)] min-h-72">
+                <div className="space-y-4 pr-4">
+                  <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
+                    <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                      <MetaPill label="Addr Type" value={selectedPacket.address_type || "unknown"} />
+                      <MetaPill label="SID" value={selectedPacket.sid} />
+                      <MetaPill label="Adv Type" value={selectedPacket.adv_type} />
+                      <MetaPill label="Adv Props" value={`0x${selectedPacket.adv_props.toString(16).toUpperCase()}`} />
+                      <MetaPill label="Interval" value={selectedPacket.interval} />
+                      <MetaPill label="Primary PHY" value={selectedPacket.primary_phy} />
+                      <MetaPill label="Secondary PHY" value={selectedPacket.secondary_phy} />
+                      <MetaPill label="Tx Power" value={selectedPacket.tx_power ?? "unknown"} />
+                    </div>
+                  </div>
+
+                  <PacketPayloadSection
+                    title="Advertising Payload"
+                    description={`${selectedPacket.raw_data.length} bytes`}
+                    bytes={selectedPacket.raw_data}
+                  />
+
+                  {selectedPacket.raw_scan_response.length > 0 && (
+                    <PacketPayloadSection
+                      title="Scan Response"
+                      description={`${selectedPacket.raw_scan_response.length} bytes`}
+                      bytes={selectedPacket.raw_scan_response}
+                    />
+                  )}
+
+                  <Card className="border-border/60">
+                    <CardHeader>
+                      <CardTitle>Decoded Fields</CardTitle>
+                      <CardDescription>AD structures decoded from the selected packet payload.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      {parseAdvertisementStructures(selectedPacket.raw_data).map((field) => (
+                        <div key={`${field.offset}-${field.type}`} className="rounded-md border border-border/60 px-3 py-2">
+                          <div className="flex items-center justify-between gap-3">
+                            <p className="text-sm font-medium">{field.typeName}</p>
+                            <span className="font-mono text-xs text-muted-foreground">
+                              offset {field.offset} · len {field.length}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-sm text-muted-foreground">{field.summary}</p>
+                          <p className="mt-1 font-mono text-xs text-muted-foreground">{field.hex || "No field data"}</p>
+                        </div>
+                      ))}
+                    </CardContent>
+                  </Card>
+                </div>
+              </ScrollArea>
+            ) : (
+              <p className="text-sm text-muted-foreground">Select a packet to inspect it.</p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
