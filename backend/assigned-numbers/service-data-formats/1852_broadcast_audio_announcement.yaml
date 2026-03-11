@@ -1,0 +1,13 @@
+uuid: 0x1852
+name: Broadcast Audio Announcement
+description: Carries the broadcast identifier and any additional trailing bytes published in Service Data for the Broadcast Audio Announcement service.
+fields:
+  - field: Broadcast ID
+    type: uint24
+    kind: uint24
+    format: hex
+  - field: Trailing Data
+    type: bytes
+    kind: bytes_remainder
+    omit_if_empty: true
+validations: []

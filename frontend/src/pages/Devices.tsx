@@ -41,8 +41,20 @@ import {
   resolveCompanyName,
   resolveServiceName,
 } from "@/lib/ble-utils";
-import { decodeDaemonAdvertisement } from "@/lib/tauri";
-import type { BleDevice, BlePacket, DaemonUnit, DecodedServiceData } from "@/lib/tauri";
+import {
+  decodeDaemonAdvertisement,
+  describeDaemonServiceDataFormats,
+} from "@/lib/tauri";
+import type {
+  BleDevice,
+  BlePacket,
+  DaemonUnit,
+  DecodedField,
+  DecodedServiceData,
+  ServiceDataEnumEntryMetadata,
+  ServiceDataFieldMetadata,
+  ServiceDataFormatMetadata,
+} from "@/lib/tauri";
 
 const RSSI_WINDOW_SIZE = 6;
 const MAX_PACKETS_IN_VIEW = 300;
@@ -65,9 +77,168 @@ interface ResolvedServicePayloadObservation {
   serviceUuid: string;
   serviceLabel: string;
   rawValue: string;
+  statusCode: number;
+  statusMessage: string;
   fields: DecodedServiceData["fields"];
   count: number;
   lastSeenMs: number;
+  variantCount: number;
+}
+
+const serviceDataFormatMetadataCache = new Map<string, ServiceDataFormatMetadata>();
+
+function normalizeMetadataUuid(uuid: string) {
+  return uuid.trim().toLowerCase();
+}
+
+function parseNumericFieldValue(value: string) {
+  if (value.startsWith("0x") || value.startsWith("0X")) {
+    const parsed = Number.parseInt(value.slice(2), 16);
+    return Number.isNaN(parsed) ? null : parsed;
+  }
+
+  if (/^\d+$/.test(value)) {
+    const parsed = Number.parseInt(value, 10);
+    return Number.isNaN(parsed) ? null : parsed;
+  }
+
+  return null;
+}
+
+function resolveEnumEntries(
+  field: DecodedField,
+  metadata: ServiceDataFieldMetadata | undefined
+) {
+  if (!metadata || metadata.enum_entries.length === 0) {
+    return [];
+  }
+
+  const numericValue = parseNumericFieldValue(field.value);
+  if (numericValue == null) {
+    return [];
+  }
+
+  return metadata.enum_entries.filter((entry) => {
+    if (metadata.enum_match === "bitfield_all") {
+      return entry.value !== 0 && (numericValue & entry.value) === entry.value;
+    }
+    return numericValue === entry.value;
+  });
+}
+
+function useServiceDataFormatMetadata(serviceUuids: string[]) {
+  const [metadataByUuid, setMetadataByUuid] = useState<Record<string, ServiceDataFormatMetadata>>({});
+  const [metadataState, setMetadataState] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [metadataError, setMetadataError] = useState<string | null>(null);
+
+  const normalizedUuids = useMemo(() => {
+    const seen = new Set<string>();
+    const unique: string[] = [];
+    for (const uuid of serviceUuids) {
+      const normalized = normalizeMetadataUuid(uuid);
+      if (!normalized || seen.has(normalized)) {
+        continue;
+      }
+      seen.add(normalized);
+      unique.push(normalized);
+    }
+    return unique;
+  }, [serviceUuids]);
+  const normalizedUuidsKey = normalizedUuids.join("\u001F");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (normalizedUuids.length === 0) {
+      setMetadataByUuid({});
+      setMetadataState("ready");
+      setMetadataError(null);
+      return;
+    }
+
+    setMetadataByUuid(
+      Object.fromEntries(
+        normalizedUuids.flatMap((uuid) => {
+          const metadata = serviceDataFormatMetadataCache.get(uuid);
+          return metadata ? [[uuid, metadata] as const] : [];
+        })
+      )
+    );
+
+    const missing = normalizedUuids.filter((uuid) => !serviceDataFormatMetadataCache.has(uuid));
+    if (missing.length === 0) {
+      setMetadataState("ready");
+      setMetadataError(null);
+      return;
+    }
+
+    setMetadataState("loading");
+    setMetadataError(null);
+
+    describeDaemonServiceDataFormats(missing)
+      .then((formats) => {
+        if (cancelled) {
+          return;
+        }
+
+        for (const format of formats) {
+          serviceDataFormatMetadataCache.set(normalizeMetadataUuid(format.service_uuid), format);
+        }
+
+        setMetadataByUuid(
+          Object.fromEntries(
+            normalizedUuids.flatMap((uuid) => {
+              const metadata = serviceDataFormatMetadataCache.get(uuid);
+              return metadata ? [[uuid, metadata] as const] : [];
+            })
+          )
+        );
+        setMetadataState("ready");
+      })
+      .catch((error: unknown) => {
+        if (cancelled) {
+          return;
+        }
+
+        setMetadataState("error");
+        setMetadataError(error instanceof Error ? error.message : String(error));
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [normalizedUuidsKey]);
+
+  return { metadataByUuid, metadataState, metadataError };
+}
+
+function EnumEntryList({
+  entries,
+}: {
+  entries: ServiceDataEnumEntryMetadata[];
+}) {
+  if (entries.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="mt-2 space-y-2">
+      {entries.map((entry) => (
+        <div
+          key={`${entry.short_name}:${entry.value}`}
+          className="rounded-md border border-border/50 bg-muted/30 px-2 py-2"
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline">{entry.short_name}</Badge>
+            <span className="font-mono text-xs text-muted-foreground">
+              0x{entry.value.toString(16).toUpperCase()}
+            </span>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">{entry.description}</p>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function fingerprintLabel(stableId: string) {
@@ -1272,31 +1443,81 @@ function SelectedServiceInspector({
   serviceLabels: Record<string, string>;
   packets: BlePacket[];
 }) {
-  const [payloads, setPayloads] = useState<ResolvedServicePayloadObservation[]>([]);
+  const [snapshotPayload, setSnapshotPayload] = useState<ResolvedServicePayloadObservation | null>(null);
   const [decodeState, setDecodeState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [decodeError, setDecodeError] = useState<string | null>(null);
 
   const normalizedServiceUuid = serviceUuid.toLowerCase();
   const resolvedServiceName = resolveServiceName(serviceUuid, serviceLabels);
   const serviceUuid16 = useMemo(() => parseBluetoothSigUuid16(serviceUuid), [serviceUuid]);
+  const { metadataByUuid, metadataState, metadataError } = useServiceDataFormatMetadata([serviceUuid]);
+  const serviceMetadata = metadataByUuid[normalizeMetadataUuid(serviceUuid)];
+  const serviceSnapshot = useMemo(() => {
+    if (serviceUuid16 == null) {
+      return null;
+    }
+
+    const variants = new Map<string, {
+      signature: string;
+      packet: BlePacket;
+      payloadBytes: number[];
+      count: number;
+      lastSeenMs: number;
+    }>();
+
+    for (const packet of packets) {
+      const payloadBytes = findServicePayloadSnapshot(packet, serviceUuid16);
+      if (!payloadBytes) {
+        continue;
+      }
+
+      const signature = servicePayloadSignature(packet, serviceUuid16);
+      if (!signature) {
+        continue;
+      }
+
+      const existing = variants.get(signature);
+      if (existing) {
+        existing.count += 1;
+        if (packet.timestamp_ms > existing.lastSeenMs) {
+          existing.lastSeenMs = packet.timestamp_ms;
+          existing.packet = packet;
+        }
+        continue;
+      }
+
+      variants.set(signature, {
+        signature,
+        packet,
+        payloadBytes,
+        count: 1,
+        lastSeenMs: packet.timestamp_ms,
+      });
+    }
+
+    const ordered = [...variants.values()].sort((a, b) => b.lastSeenMs - a.lastSeenMs);
+    if (ordered.length === 0) {
+      return null;
+    }
+
+    const current = ordered[0];
+    if (!current) {
+      return null;
+    }
+
+    return {
+      current,
+      variantCount: ordered.length,
+      totalCount: ordered.reduce((sum, variant) => sum + variant.count, 0),
+    };
+  }, [packets, serviceUuid16]);
+  const snapshotCurrent = serviceSnapshot?.current ?? null;
 
   useEffect(() => {
     let cancelled = false;
 
-    if (serviceUuid16 == null) {
-      setPayloads([]);
-      setDecodeState("ready");
-      setDecodeError(null);
-      return;
-    }
-
-    const candidatePackets = packets.filter((packet) =>
-      payloadHasServiceDataForUuid(packet.raw_data, serviceUuid16)
-      || payloadHasServiceDataForUuid(packet.raw_scan_response, serviceUuid16)
-    );
-
-    if (candidatePackets.length === 0) {
-      setPayloads([]);
+    if (!serviceSnapshot || !snapshotCurrent) {
+      setSnapshotPayload(null);
       setDecodeState("ready");
       setDecodeError(null);
       return;
@@ -1305,50 +1526,34 @@ function SelectedServiceInspector({
     setDecodeState("loading");
     setDecodeError(null);
 
-    Promise.all(candidatePackets.map(async (packet) => ({
-      packet,
-      decoded: await decodeDaemonAdvertisement(packet.raw_data, packet.raw_scan_response),
-    })))
-      .then((results) => {
+    decodeDaemonAdvertisement(
+      snapshotCurrent.packet.raw_data,
+      snapshotCurrent.packet.raw_scan_response
+    )
+      .then((decoded) => {
         if (cancelled) {
           return;
         }
 
-        const grouped = new Map<string, ResolvedServicePayloadObservation>();
-
-        for (const { packet, decoded } of results) {
-          for (const service of decoded) {
-            if (service.service_uuid.toLowerCase() !== normalizedServiceUuid) {
-              continue;
-            }
-
-            const key = service.raw_value;
-            const existing = grouped.get(key);
-            if (existing) {
-              existing.count += 1;
-              existing.lastSeenMs = Math.max(existing.lastSeenMs, packet.timestamp_ms);
-              continue;
-            }
-
-            grouped.set(key, {
-              key,
-              serviceUuid: service.service_uuid,
-              serviceLabel: service.service_label,
-              rawValue: service.raw_value,
-              fields: service.fields,
-              count: 1,
-              lastSeenMs: packet.timestamp_ms,
-            });
-          }
+        const service = decoded.find((entry) => entry.service_uuid.toLowerCase() === normalizedServiceUuid);
+        if (!service) {
+          setSnapshotPayload(null);
+          setDecodeState("ready");
+          return;
         }
 
-        setPayloads(
-          [...grouped.values()].sort((a, b) =>
-            b.lastSeenMs - a.lastSeenMs
-            || b.count - a.count
-            || a.rawValue.localeCompare(b.rawValue)
-          )
-        );
+        setSnapshotPayload({
+          key: `${service.status_code}:${service.raw_value}`,
+          serviceUuid: service.service_uuid,
+          serviceLabel: service.service_label,
+          rawValue: service.raw_value,
+          statusCode: service.status_code,
+          statusMessage: service.status_message,
+          fields: service.fields,
+          count: snapshotCurrent.count,
+          lastSeenMs: snapshotCurrent.lastSeenMs,
+          variantCount: serviceSnapshot.variantCount,
+        });
         setDecodeState("ready");
       })
       .catch((error: unknown) => {
@@ -1356,7 +1561,7 @@ function SelectedServiceInspector({
           return;
         }
 
-        setPayloads([]);
+        setSnapshotPayload(null);
         setDecodeState("error");
         setDecodeError(error instanceof Error ? error.message : String(error));
       });
@@ -1364,7 +1569,31 @@ function SelectedServiceInspector({
     return () => {
       cancelled = true;
     };
-  }, [normalizedServiceUuid, packets, serviceUuid16]);
+  }, [normalizedServiceUuid, serviceSnapshot?.variantCount, snapshotCurrent?.signature]);
+
+  useEffect(() => {
+    if (!serviceSnapshot || !snapshotCurrent) {
+      return;
+    }
+
+    setSnapshotPayload((current) => {
+      if (!current || current.rawValue.toLowerCase().replace(/^0x/, "") !== snapshotCurrent.signature) {
+        return current;
+      }
+
+      return {
+        ...current,
+        count: snapshotCurrent.count,
+        lastSeenMs: snapshotCurrent.lastSeenMs,
+        variantCount: serviceSnapshot.variantCount,
+      };
+    });
+  }, [serviceSnapshot?.variantCount, snapshotCurrent?.signature, snapshotCurrent?.count, snapshotCurrent?.lastSeenMs]);
+
+  const snapshotBytes = useMemo(
+    () => snapshotPayload ? parseHexStringBytes(snapshotPayload.rawValue) : snapshotCurrent?.payloadBytes ?? [],
+    [snapshotPayload, snapshotCurrent]
+  );
 
   return (
     <div className="space-y-3">
@@ -1380,11 +1609,31 @@ function SelectedServiceInspector({
         <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Classification</p>
         <p className="mt-1 text-sm">{isStandardUuid(serviceUuid) ? "Bluetooth SIG base UUID" : "Custom / vendor UUID"}</p>
       </div>
+      {metadataState === "error" ? (
+        <div className="rounded-md border border-destructive/40 px-3 py-3">
+          <p className="text-xs uppercase tracking-[0.12em] text-destructive">Format Metadata</p>
+          <p className="mt-1 text-sm text-destructive">
+            Failed to load service format metadata: {metadataError ?? "unknown error"}
+          </p>
+        </div>
+      ) : serviceMetadata?.service_description ? (
+        <div className="rounded-md border border-border/60 px-3 py-3">
+          <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Description</p>
+          <p className="mt-1 text-sm text-muted-foreground">{serviceMetadata.service_description}</p>
+        </div>
+      ) : metadataState === "loading" ? (
+        <div className="rounded-md border border-border/60 px-3 py-3">
+          <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Description</p>
+          <p className="mt-1 text-sm text-muted-foreground">Loading service format metadata...</p>
+        </div>
+      ) : null}
       <div className="rounded-md border border-border/60 px-3 py-3">
         <div className="flex items-center justify-between gap-3">
-          <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Service Payload</p>
-          {payloads.length > 0 && (
-            <Badge variant="secondary">{payloads.length} variant{payloads.length === 1 ? "" : "s"}</Badge>
+          <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Snapshot Payload</p>
+          {snapshotPayload && (
+            <Badge variant="secondary">
+              {snapshotPayload.variantCount} variant{snapshotPayload.variantCount === 1 ? "" : "s"}
+            </Badge>
           )}
         </div>
 
@@ -1392,15 +1641,11 @@ function SelectedServiceInspector({
           <p className="mt-2 text-sm text-muted-foreground">
             No daemon-backed payload resolver is available for this UUID form yet.
           </p>
-        ) : decodeState === "loading" ? (
-          <p className="mt-2 text-sm text-muted-foreground">
-            Resolving service payloads from recent packets...
-          </p>
         ) : decodeState === "error" ? (
           <p className="mt-2 text-sm text-destructive">
             Failed to resolve service payloads: {decodeError ?? "unknown error"}
           </p>
-        ) : payloads.length === 0 ? (
+        ) : !serviceSnapshot ? (
           <div className="mt-2 space-y-2">
             <p className="text-sm text-muted-foreground">
               No decoded service-data payloads were observed for this service in the current packet window.
@@ -1411,42 +1656,62 @@ function SelectedServiceInspector({
           </div>
         ) : (
           <div className="mt-3 space-y-3">
-            {payloads.map((payload) => (
-              <div key={payload.key} className="rounded-md border border-border/60 px-3 py-3">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium">{payload.serviceLabel}</p>
-                    <p className="font-mono text-xs text-muted-foreground">{payload.serviceUuid}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="secondary">{payload.count}x</Badge>
-                  </div>
-                </div>
+            <div className="grid gap-2 md:grid-cols-4">
+              <MetaPill label="Last Seen" value={formatPacketTimestamp(snapshotCurrent!.lastSeenMs)} />
+              <MetaPill label="Packet Copies" value={snapshotCurrent!.count} />
+              <MetaPill label="Variants" value={serviceSnapshot.variantCount} />
+              <MetaPill
+                label="Status"
+                value={snapshotPayload ? `${snapshotPayload.statusCode} ${snapshotPayload.statusMessage}` : (decodeState === "loading" ? "decoding..." : "pending")}
+              />
+            </div>
 
-                <div className="mt-3 grid gap-3 md:grid-cols-2">
-                  <div className="rounded-md border border-border/60 px-3 py-3">
-                    <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Raw Value</p>
-                  <p className="mt-1 break-all font-mono text-xs text-muted-foreground">{payload.rawValue}</p>
+            <div className="grid gap-3 xl:grid-cols-[minmax(0,1.2fr)_minmax(18rem,0.8fr)]">
+              <div className="rounded-md border border-border/60 px-3 py-3">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium">{snapshotPayload?.serviceLabel ?? resolvedServiceName}</p>
+                    <p className="font-mono text-xs text-muted-foreground">{serviceUuid}</p>
                   </div>
-                  <div className="rounded-md border border-border/60 px-3 py-3">
-                    <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Last Seen</p>
-                    <p className="mt-1 text-sm">{formatPacketTimestamp(payload.lastSeenMs)}</p>
-                  </div>
+                  {snapshotPayload && (
+                    <Badge variant={snapshotPayload.statusCode === 200 ? "secondary" : "outline"}>
+                      {snapshotPayload.statusCode} {snapshotPayload.statusMessage}
+                    </Badge>
+                  )}
                 </div>
-
-                <div className="mt-3 space-y-2">
-                  {payload.fields.map((field, index) => (
-                    <div key={`${payload.key}:${field.field}:${index}`} className="rounded-md border border-border/60 px-3 py-2">
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="text-sm font-medium">{field.field}</p>
-                        <Badge variant="secondary">{field.type}</Badge>
-                      </div>
-                      <p className="mt-1 break-all text-sm text-muted-foreground">{field.value}</p>
-                    </div>
-                  ))}
-                </div>
+                <HexAsciiTable bytes={snapshotBytes} />
               </div>
-            ))}
+
+              <div className="rounded-md border border-border/60 px-3 py-3">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <p className="text-sm font-medium">Decoded Fields</p>
+                  <Badge variant="secondary">{snapshotPayload?.fields.length ?? 0}</Badge>
+                </div>
+                {decodeState === "loading" && !snapshotPayload ? (
+                  <p className="text-sm text-muted-foreground">Decoding snapshot payload...</p>
+                ) : !snapshotPayload ? (
+                  <p className="text-sm text-muted-foreground">No decoded snapshot is available yet.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {snapshotPayload.fields.map((field, index) => (
+                      <div key={`${snapshotPayload.key}:${field.field}:${index}`} className="rounded-md border border-border/60 px-3 py-2">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-sm font-medium">{field.field}</p>
+                          <Badge variant="secondary">{field.type}</Badge>
+                        </div>
+                        <p className="mt-1 break-all font-mono text-xs text-muted-foreground">{field.value}</p>
+                        <EnumEntryList
+                          entries={resolveEnumEntries(
+                            field,
+                            serviceMetadata?.fields.find((candidate) => candidate.field === field.field)
+                          )}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -1464,6 +1729,11 @@ function PacketInspector({
   const [decodedServiceData, setDecodedServiceData] = useState<DecodedServiceData[]>([]);
   const [decodeState, setDecodeState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [decodeError, setDecodeError] = useState<string | null>(null);
+  const metadataUuids = useMemo(
+    () => decodedServiceData.map((service) => service.service_uuid),
+    [decodedServiceData]
+  );
+  const { metadataByUuid, metadataState, metadataError } = useServiceDataFormatMetadata(metadataUuids);
 
   useEffect(() => {
     let cancelled = false;
@@ -1557,6 +1827,9 @@ function PacketInspector({
           decodeError={decodeError}
           decodeState={decodeState}
           decodedServiceData={decodedServiceData}
+          metadataByUuid={metadataByUuid}
+          metadataState={metadataState}
+          metadataError={metadataError}
         />
       </div>
     </ScrollArea>
@@ -1612,10 +1885,16 @@ function DecodedServiceDataSection({
   decodedServiceData,
   decodeState,
   decodeError,
+  metadataByUuid,
+  metadataState,
+  metadataError,
 }: {
   decodedServiceData: DecodedServiceData[];
   decodeState: "idle" | "loading" | "ready" | "error";
   decodeError: string | null;
+  metadataByUuid: Record<string, ServiceDataFormatMetadata>;
+  metadataState: "idle" | "loading" | "ready" | "error";
+  metadataError: string | null;
 }) {
   return (
     <Card className="border-border/60">
@@ -1637,13 +1916,29 @@ function DecodedServiceDataSection({
         {decodeState === "ready" && decodedServiceData.length === 0 && (
           <p className="text-sm text-muted-foreground">No known service-data payloads were decoded from this packet.</p>
         )}
+        {metadataState === "error" && (
+          <p className="text-sm text-destructive">
+            Failed to load service format metadata: {metadataError ?? "unknown error"}
+          </p>
+        )}
         {decodedServiceData.map((service) => (
           <div key={`${service.service_uuid}:${service.raw_value}`} className="rounded-md border border-border/60 px-3 py-3">
+            {(() => {
+              const serviceMetadata = metadataByUuid[normalizeMetadataUuid(service.service_uuid)];
+              const serviceTitle = serviceMetadata?.service_label || service.service_label;
+              return (
+                <>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-sm font-medium">{service.service_label}</p>
+                <p className="text-sm font-medium">{serviceTitle}</p>
                 <p className="break-all font-mono text-xs text-muted-foreground">{service.service_uuid}</p>
+                {serviceMetadata?.service_description && (
+                  <p className="mt-1 text-sm text-muted-foreground">{serviceMetadata.service_description}</p>
+                )}
               </div>
+              <Badge variant={service.status_code === 200 ? "secondary" : "outline"}>
+                {service.status_code} {service.status_message}
+              </Badge>
             </div>
 
             <div className="mt-3 grid gap-3 md:grid-cols-2">
@@ -1665,9 +1960,18 @@ function DecodedServiceDataSection({
                     <Badge variant="secondary">{field.type}</Badge>
                   </div>
                   <p className="mt-1 break-all text-sm text-muted-foreground">{field.value}</p>
+                  <EnumEntryList
+                    entries={resolveEnumEntries(
+                      field,
+                      serviceMetadata?.fields.find((candidate) => candidate.field === field.field)
+                    )}
+                  />
                 </div>
               ))}
             </div>
+                </>
+              );
+            })()}
           </div>
         ))}
       </CardContent>
@@ -1715,7 +2019,28 @@ function parseBluetoothSigUuid16(uuid: string): number | null {
   return Number.parseInt(value, 16);
 }
 
-function payloadHasServiceDataForUuid(bytes: number[], serviceUuid16: number): boolean {
+function decodeAscii(byte: number) {
+  return byte >= 0x20 && byte <= 0x7e ? String.fromCharCode(byte) : ".";
+}
+
+function parseHexStringBytes(hex: string) {
+  const normalized = hex.startsWith("0x") || hex.startsWith("0X") ? hex.slice(2) : hex;
+  if (normalized.length === 0 || normalized.length % 2 !== 0) {
+    return [];
+  }
+
+  const bytes: number[] = [];
+  for (let i = 0; i < normalized.length; i += 2) {
+    const value = Number.parseInt(normalized.slice(i, i + 2), 16);
+    if (Number.isNaN(value)) {
+      return [];
+    }
+    bytes.push(value);
+  }
+  return bytes;
+}
+
+function findServiceDataPayload(bytes: number[], serviceUuid16: number) {
   let offset = 0;
 
   while (offset < bytes.length) {
@@ -1733,12 +2058,91 @@ function payloadHasServiceDataForUuid(bytes: number[], serviceUuid16: number): b
     if (type === 0x16 && field.length >= 2) {
       const uuid = (field[0] ?? 0) | ((field[1] ?? 0) << 8);
       if (uuid === serviceUuid16) {
-        return true;
+        return field.slice(2);
       }
     }
 
     offset += fieldLength + 1;
   }
 
-  return false;
+  return null;
+}
+
+function findServicePayloadSnapshot(packet: BlePacket, serviceUuid16: number) {
+  const advertisingPayload = findServiceDataPayload(packet.raw_data, serviceUuid16);
+  if (advertisingPayload) {
+    return advertisingPayload;
+  }
+
+  return findServiceDataPayload(packet.raw_scan_response, serviceUuid16);
+}
+
+function servicePayloadSignature(packet: BlePacket, serviceUuid16: number) {
+  const payload = findServicePayloadSnapshot(packet, serviceUuid16);
+  if (!payload) {
+    return null;
+  }
+
+  return payload.map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function HexAsciiTable({
+  bytes,
+}: {
+  bytes: number[];
+}) {
+  const rows = useMemo(() => {
+    const nextRows: Array<{
+      offset: string;
+      hexColumns: string[];
+      ascii: string;
+    }> = [];
+
+    for (let offset = 0; offset < bytes.length; offset += 16) {
+      const slice = bytes.slice(offset, offset + 16);
+      const hexColumns = Array.from({ length: 16 }, (_, index) => {
+        const value = slice[index];
+        return value == null ? "  " : value.toString(16).padStart(2, "0").toUpperCase();
+      });
+      const ascii = slice.map(decodeAscii).join("");
+      nextRows.push({
+        offset: offset.toString(16).padStart(4, "0").toUpperCase(),
+        hexColumns,
+        ascii,
+      });
+    }
+
+    return nextRows;
+  }, [bytes]);
+
+  if (bytes.length === 0) {
+    return (
+      <div className="rounded-md border border-border/60 bg-muted/20 px-3 py-3">
+        <p className="text-sm text-muted-foreground">No payload bytes.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto rounded-md border border-border/60 bg-muted/20 px-3 py-2">
+      <div className="min-w-[42rem] space-y-1 font-mono text-xs">
+        <div className="grid grid-cols-[4rem_1fr_8rem] gap-3 border-b border-border/60 pb-2 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+          <span>Offset</span>
+          <span>Hex</span>
+          <span>ASCII</span>
+        </div>
+        {rows.map((row) => (
+          <div key={row.offset} className="grid grid-cols-[4rem_1fr_8rem] gap-3">
+            <span className="text-muted-foreground">{row.offset}</span>
+            <div className="grid grid-cols-16 gap-1">
+              {row.hexColumns.map((column, index) => (
+                <span key={`${row.offset}:${index}`}>{column}</span>
+              ))}
+            </div>
+            <span className="tracking-[0.08em] text-muted-foreground">{row.ascii}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }

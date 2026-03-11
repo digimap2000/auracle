@@ -4,7 +4,10 @@ mod devices;
 mod error;
 mod serial;
 
-use ble::{BluetoothAdapter, DecodedField, DecodedServiceData};
+use ble::{
+    BluetoothAdapter, DecodedField, DecodedServiceData, ServiceDataEnumEntryMetadata,
+    ServiceDataFieldMetadata, ServiceDataFormatMetadata,
+};
 use daemon::scan_bridge::DaemonScanBridge;
 use daemon::{DaemonCandidate, DaemonClient, DaemonUnit};
 use devices::ConnectedDevice;
@@ -154,12 +157,7 @@ async fn decode_daemon_advertisement(
     raw_data: Vec<u8>,
     raw_scan_response: Vec<u8>,
 ) -> Result<Vec<DecodedServiceData>, AuracleError> {
-    let channel = tonic::transport::Channel::from_static("http://127.0.0.1:50051")
-        .connect()
-        .await
-        .map_err(|e| AuracleError::ConnectionFailed(format!("Daemon connection failed: {e}")))?;
-
-    let mut client = daemon::proto::observation::observation_service_client::ObservationServiceClient::new(channel);
+    let mut client = daemon::observation_client();
     let response = client
         .decode_advertisement(daemon::proto::observation::DecodeAdvertisementRequest {
             raw_data,
@@ -176,6 +174,8 @@ async fn decode_daemon_advertisement(
             service_uuid: service.service_uuid,
             service_label: service.service_label,
             raw_value: service.raw_value,
+            status_code: service.status_code,
+            status_message: service.status_message,
             fields: service
                 .fields
                 .into_iter()
@@ -189,6 +189,52 @@ async fn decode_daemon_advertisement(
         .collect();
 
     Ok(decoded)
+}
+
+#[tauri::command]
+async fn describe_daemon_service_data_formats(
+    service_uuids: Vec<String>,
+) -> Result<Vec<ServiceDataFormatMetadata>, AuracleError> {
+    let mut client = daemon::observation_client();
+    let response = client
+        .describe_service_data_formats(daemon::proto::observation::DescribeServiceDataFormatsRequest {
+            service_uuids,
+        })
+        .await
+        .map_err(|e| AuracleError::CommandFailed(format!("DescribeServiceDataFormats failed: {e}")))?;
+
+    let formats = response
+        .into_inner()
+        .formats
+        .into_iter()
+        .map(|format| ServiceDataFormatMetadata {
+            service_uuid: format.service_uuid,
+            service_label: format.service_label,
+            service_description: format.service_description,
+            status_code: format.status_code,
+            status_message: format.status_message,
+            fields: format
+                .fields
+                .into_iter()
+                .map(|field| ServiceDataFieldMetadata {
+                    field: field.field,
+                    r#type: field.r#type,
+                    enum_match: field.enum_match,
+                    enum_entries: field
+                        .enum_entries
+                        .into_iter()
+                        .map(|entry| ServiceDataEnumEntryMetadata {
+                            value: entry.value,
+                            short_name: entry.short_name,
+                            description: entry.description,
+                        })
+                        .collect(),
+                })
+                .collect(),
+        })
+        .collect();
+
+    Ok(formats)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -205,6 +251,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             connect_device,
+            describe_daemon_service_data_formats,
             disconnect_device,
             decode_daemon_advertisement,
             get_bluetooth_adapter,

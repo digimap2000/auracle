@@ -57,7 +57,34 @@ pub struct DecodedServiceData {
     pub service_uuid: String,
     pub service_label: String,
     pub raw_value: String,
+    pub status_code: u32,
+    pub status_message: String,
     pub fields: Vec<DecodedField>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServiceDataFormatMetadata {
+    pub service_uuid: String,
+    pub service_label: String,
+    pub service_description: String,
+    pub status_code: u32,
+    pub status_message: String,
+    pub fields: Vec<ServiceDataFieldMetadata>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServiceDataFieldMetadata {
+    pub field: String,
+    pub r#type: String,
+    pub enum_match: String,
+    pub enum_entries: Vec<ServiceDataEnumEntryMetadata>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServiceDataEnumEntryMetadata {
+    pub value: u32,
+    pub short_name: String,
+    pub description: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

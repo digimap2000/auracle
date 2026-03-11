@@ -1,0 +1,30 @@
+uuid: 0x1856
+name: Public Broadcast Announcement
+description: Carries the public broadcast feature flags and an optional metadata blob for the Public Broadcast Announcement service.
+fields:
+  - field: Features
+    type: bitfield8
+    kind: uint8
+    format: hex
+    enum_match: bitfield_all
+    enumerations:
+      - value: 0x01
+        short_name: encrypted
+        description: The public broadcast requires the broadcast code and is not open for unencrypted reception.
+      - value: 0x02
+        short_name: standard_quality
+        description: The public broadcast offers a standard quality audio presentation.
+      - value: 0x04
+        short_name: high_quality
+        description: The public broadcast offers a high quality audio presentation.
+  - field: Metadata Length
+    type: uint8
+    kind: uint8
+    format: decimal
+  - field: Metadata
+    type: bytes
+    kind: bytes_remainder
+validations:
+  - kind: bytes_field_matches_u8_length
+    value_field: Metadata Length
+    bytes_field: Metadata

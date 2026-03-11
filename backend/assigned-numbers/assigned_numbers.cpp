@@ -1,6 +1,9 @@
 #include <assigned-numbers/assigned_numbers.hpp>
 
+#include "service_data_formats.hpp"
+
 #include <cctype>
+#include <cstddef>
 #include <cstdint>
 #include <format>
 #include <optional>
@@ -96,6 +99,216 @@ constexpr std::string_view kSigBaseUuidSuffix = "-0000-1000-8000-00805f9b34fb";
     return out;
 }
 
+[[nodiscard]] std::string_view service_data_status_text(std::uint16_t code) noexcept {
+    switch (code) {
+    case 200:
+        return "OK";
+    case 400:
+        return "Invalid Service UUID";
+    case 404:
+        return "Unknown Service Packet Format";
+    case 422:
+        return "Malformed Service Packet";
+    case 500:
+        return "Invalid Service Packet Definition";
+    default:
+        return "Unknown Status";
+    }
+}
+
+[[nodiscard]] decoded_service_data make_decoded_service_data(
+    std::string_view service_uuid,
+    std::string_view service_label,
+    std::span<const std::uint8_t> payload) {
+    return decoded_service_data{
+        .service_uuid = std::string(service_uuid),
+        .service_label = std::string(service_label),
+        .raw_value = std::vector<std::uint8_t>(payload.begin(), payload.end()),
+        .fields = {},
+        .status_code = 200,
+        .status_message = std::string(service_data_status_text(200)),
+    };
+}
+
+[[nodiscard]] service_data_format_metadata make_service_data_format_metadata(
+    std::string_view service_uuid,
+    std::string_view service_label) {
+    return service_data_format_metadata{
+        .service_uuid = std::string(service_uuid),
+        .service_label = std::string(service_label),
+        .service_description = {},
+        .fields = {},
+        .status_code = 200,
+        .status_message = std::string(service_data_status_text(200)),
+    };
+}
+
+void set_status(decoded_service_data* decoded, std::uint16_t code, std::string message) {
+    decoded->status_code = code;
+    decoded->status_message = message;
+}
+
+void set_status(service_data_format_metadata* metadata, std::uint16_t code, std::string message) {
+    metadata->status_code = code;
+    metadata->status_message = message;
+}
+
+[[nodiscard]] std::string format_unsigned(
+    std::uint32_t value,
+    std::size_t width_bytes,
+    detail::service_data_numeric_format format) {
+    switch (format) {
+    case detail::service_data_numeric_format::decimal:
+        return std::to_string(value);
+    case detail::service_data_numeric_format::hex:
+        return std::format("0x{:0{}X}", value, static_cast<int>(width_bytes * 2U));
+    }
+
+    return std::to_string(value);
+}
+
+struct parsed_field_state {
+    bool has_unsigned_value = false;
+    std::uint32_t unsigned_value = 0;
+    std::size_t byte_size = 0;
+};
+
+[[nodiscard]] decoded_service_data parse_service_data_payload(
+    std::string_view service_uuid,
+    std::string_view service_label,
+    std::span<const std::uint8_t> payload,
+    const detail::service_data_format_definition& format) {
+    decoded_service_data decoded = make_decoded_service_data(service_uuid, service_label, payload);
+    std::vector<parsed_field_state> parsed_fields;
+    parsed_fields.reserve(format.fields.size());
+
+    std::size_t offset = 0;
+    for (const auto& field : format.fields) {
+        switch (field.kind) {
+        case detail::service_data_field_kind::uint8: {
+            constexpr std::size_t kFieldSize = 1U;
+            if (offset + kFieldSize > payload.size()) {
+                set_status(
+                    &decoded,
+                    422,
+                    std::format(
+                        "{}: expected {} byte for {}",
+                        service_data_status_text(422),
+                        kFieldSize,
+                        field.field));
+                return decoded;
+            }
+
+            const auto value = payload[offset];
+            offset += kFieldSize;
+            decoded.fields.push_back({
+                .field = std::string(field.field),
+                .type = std::string(field.type),
+                .value = format_unsigned(value, kFieldSize, field.numeric_format),
+            });
+            parsed_fields.push_back({
+                .has_unsigned_value = true,
+                .unsigned_value = value,
+                .byte_size = kFieldSize,
+            });
+            break;
+        }
+        case detail::service_data_field_kind::uint24: {
+            constexpr std::size_t kFieldSize = 3U;
+            if (offset + kFieldSize > payload.size()) {
+                set_status(
+                    &decoded,
+                    422,
+                    std::format(
+                        "{}: expected {} bytes for {}",
+                        service_data_status_text(422),
+                        kFieldSize,
+                        field.field));
+                return decoded;
+            }
+
+            const auto value = static_cast<std::uint32_t>(
+                payload[offset]
+                | (payload[offset + 1U] << 8U)
+                | (payload[offset + 2U] << 16U));
+            offset += kFieldSize;
+            decoded.fields.push_back({
+                .field = std::string(field.field),
+                .type = std::string(field.type),
+                .value = format_unsigned(value, kFieldSize, field.numeric_format),
+            });
+            parsed_fields.push_back({
+                .has_unsigned_value = true,
+                .unsigned_value = value,
+                .byte_size = kFieldSize,
+            });
+            break;
+        }
+        case detail::service_data_field_kind::bytes_remainder: {
+            const auto bytes = payload.subspan(offset);
+            offset = payload.size();
+            if (!field.omit_if_empty || !bytes.empty()) {
+                decoded.fields.push_back({
+                    .field = std::string(field.field),
+                    .type = std::string(field.type),
+                    .value = hex_bytes(bytes),
+                });
+            }
+            parsed_fields.push_back({
+                .byte_size = bytes.size(),
+            });
+            break;
+        }
+        }
+    }
+
+    for (const auto& validation : format.validations) {
+        switch (validation.kind) {
+        case detail::service_data_validation_kind::bytes_field_matches_u8_length: {
+            if (validation.value_field_index >= parsed_fields.size()
+                || validation.bytes_field_index >= parsed_fields.size()) {
+                set_status(
+                    &decoded,
+                    500,
+                    std::format(
+                        "{}: validation indices out of range for service 0x{:04X}",
+                        service_data_status_text(500),
+                        format.uuid));
+                return decoded;
+            }
+
+            const auto& value_field = parsed_fields[validation.value_field_index];
+            const auto& bytes_field = parsed_fields[validation.bytes_field_index];
+            if (!value_field.has_unsigned_value) {
+                set_status(
+                    &decoded,
+                    500,
+                    std::format(
+                        "{}: length field is not numeric for service 0x{:04X}",
+                        service_data_status_text(500),
+                        format.uuid));
+                return decoded;
+            }
+
+            if (bytes_field.byte_size != value_field.unsigned_value) {
+                set_status(
+                    &decoded,
+                    422,
+                    std::format(
+                        "{}: declared {} bytes, observed {} bytes",
+                        service_data_status_text(422),
+                        value_field.unsigned_value,
+                        bytes_field.byte_size));
+                return decoded;
+            }
+            break;
+        }
+        }
+    }
+
+    return decoded;
+}
+
 } // namespace
 
 std::optional<std::string_view> service_name(std::string_view uuid) noexcept {
@@ -107,101 +320,88 @@ std::optional<std::string_view> service_name(std::string_view uuid) noexcept {
     return service_name(*short_uuid);
 }
 
-std::optional<decoded_service_data> decode_service_data(
-    std::string_view service_uuid,
-    std::span<const std::uint8_t> payload) {
+service_data_format_metadata describe_service_data_format(std::string_view service_uuid) {
+    const auto fallback_label = service_name(service_uuid).value_or(service_uuid);
+    service_data_format_metadata metadata = make_service_data_format_metadata(
+        service_uuid, fallback_label);
+
     const auto short_uuid = parse_service_uuid16(service_uuid);
     if (!short_uuid.has_value()) {
-        return std::nullopt;
+        set_status(
+            &metadata,
+            400,
+            std::string(service_data_status_text(400)));
+        return metadata;
     }
 
-    const auto label = service_name(*short_uuid).value_or(service_uuid);
-    decoded_service_data decoded{
-        .service_uuid = std::string(service_uuid),
-        .service_label = std::string(label),
-        .raw_value = std::vector<std::uint8_t>(payload.begin(), payload.end()),
-        .fields = {},
-    };
+    const auto* format = detail::find_service_data_format(*short_uuid);
+    if (format == nullptr) {
+        set_status(
+            &metadata,
+            404,
+            std::string(service_data_status_text(404)));
+        return metadata;
+    }
 
-    switch (*short_uuid) {
-    case 0x1852: {
-        if (payload.size() >= 3U) {
-            const auto broadcast_id = static_cast<std::uint32_t>(
-                payload[0]
-                | (payload[1] << 8U)
-                | (payload[2] << 16U));
-            decoded.fields.push_back({
-                .field = "Broadcast ID",
-                .type = "uint24",
-                .value = std::format("0x{:06X}", broadcast_id),
-            });
-        } else {
-            decoded.fields.push_back({
-                .field = "Broadcast ID",
-                .type = "invalid",
-                .value = std::format("Expected 3 bytes, got {}", payload.size()),
+    metadata.service_label = std::string(format->name.empty()
+        ? service_name(*short_uuid).value_or(service_uuid)
+        : format->name);
+    metadata.service_description = std::string(format->description);
+    metadata.fields.reserve(format->fields.size());
+
+    for (const auto& field : format->fields) {
+        service_data_field_metadata field_metadata{
+            .field = std::string(field.field),
+            .type = std::string(field.type),
+            .enum_match = field.enum_entries.empty()
+                ? ""
+                : std::string(field.enum_match == detail::service_data_enum_match_kind::bitfield_all
+                    ? "bitfield_all"
+                    : "exact"),
+            .enum_entries = {},
+        };
+        field_metadata.enum_entries.reserve(field.enum_entries.size());
+        for (const auto& entry : field.enum_entries) {
+            field_metadata.enum_entries.push_back({
+                .value = entry.value,
+                .short_name = std::string(entry.short_name),
+                .description = std::string(entry.description),
             });
         }
-        if (payload.size() > 3U) {
-            decoded.fields.push_back({
-                .field = "Trailing Data",
-                .type = "bytes",
-                .value = hex_bytes(payload.subspan(3U)),
-            });
-        }
+        metadata.fields.push_back(std::move(field_metadata));
+    }
+
+    return metadata;
+}
+
+decoded_service_data decode_service_data(
+    std::string_view service_uuid,
+    std::span<const std::uint8_t> payload) {
+    const auto fallback_label = service_name(service_uuid).value_or(service_uuid);
+    decoded_service_data decoded = make_decoded_service_data(service_uuid, fallback_label, payload);
+
+    const auto short_uuid = parse_service_uuid16(service_uuid);
+    if (!short_uuid.has_value()) {
+        set_status(
+            &decoded,
+            400,
+            std::string(service_data_status_text(400)));
         return decoded;
     }
-    case 0x1856: {
-        if (payload.empty()) {
-            decoded.fields.push_back({
-                .field = "Features",
-                .type = "invalid",
-                .value = "Missing Public Broadcast Announcement features byte",
-            });
-            return decoded;
-        }
 
-        const auto features = payload[0];
-        decoded.fields.push_back({
-            .field = "Features",
-            .type = "bitfield8",
-            .value = std::format("0x{:02X}", features),
-        });
-
-        if (payload.size() < 2U) {
-            decoded.fields.push_back({
-                .field = "Metadata Length",
-                .type = "invalid",
-                .value = "Missing metadata length byte",
-            });
-            return decoded;
-        }
-
-        const auto metadata_len = payload[1];
-        decoded.fields.push_back({
-            .field = "Metadata Length",
-            .type = "uint8",
-            .value = std::to_string(metadata_len),
-        });
-
-        const auto metadata_bytes = payload.subspan(2U);
-        decoded.fields.push_back({
-            .field = "Metadata",
-            .type = "bytes",
-            .value = hex_bytes(metadata_bytes),
-        });
-        if (metadata_len != metadata_bytes.size()) {
-            decoded.fields.push_back({
-                .field = "Metadata Status",
-                .type = "warning",
-                .value = std::format("Declared {} bytes, observed {} bytes", metadata_len, metadata_bytes.size()),
-            });
-        }
+    const auto* format = detail::find_service_data_format(*short_uuid);
+    if (format == nullptr) {
+        set_status(
+            &decoded,
+            404,
+            std::string(service_data_status_text(404)));
         return decoded;
     }
-    default:
-        return std::nullopt;
-    }
+
+    const auto label = format->name.empty()
+        ? service_name(*short_uuid).value_or(service_uuid)
+        : format->name;
+    return parse_service_data_payload(service_uuid, label, payload, *format);
 }
 
 } // namespace auracle::assigned_numbers

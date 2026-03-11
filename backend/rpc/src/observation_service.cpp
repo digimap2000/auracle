@@ -118,4 +118,17 @@ grpc::Status ObservationServiceImpl::DecodeAdvertisement(
     return grpc::Status::OK;
 }
 
+grpc::Status ObservationServiceImpl::DescribeServiceDataFormats(
+    grpc::ServerContext* /*context*/,
+    const obs_proto::DescribeServiceDataFormatsRequest* request,
+    obs_proto::DescribeServiceDataFormatsResponse* response) {
+
+    for (const auto& service_uuid : request->service_uuids()) {
+        const auto metadata = assigned_numbers::describe_service_data_format(service_uuid);
+        to_proto(metadata, response->add_formats());
+    }
+
+    return grpc::Status::OK;
+}
+
 } // namespace auracle::rpc

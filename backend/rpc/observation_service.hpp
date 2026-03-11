@@ -39,6 +39,11 @@ public:
         const obs_proto::DecodeAdvertisementRequest* request,
         obs_proto::DecodeAdvertisementResponse* response) override;
 
+    grpc::Status DescribeServiceDataFormats(
+        grpc::ServerContext* context,
+        const obs_proto::DescribeServiceDataFormatsRequest* request,
+        obs_proto::DescribeServiceDataFormatsResponse* response) override;
+
 private:
     observation::ScannerManager& manager_;
 };

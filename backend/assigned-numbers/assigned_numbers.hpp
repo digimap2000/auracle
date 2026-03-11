@@ -16,6 +16,28 @@
 
 namespace auracle::assigned_numbers {
 
+struct service_data_enum_entry_metadata {
+    std::uint32_t value;
+    std::string short_name;
+    std::string description;
+};
+
+struct service_data_field_metadata {
+    std::string field;
+    std::string type;
+    std::string enum_match;
+    std::vector<service_data_enum_entry_metadata> enum_entries;
+};
+
+struct service_data_format_metadata {
+    std::string service_uuid;
+    std::string service_label;
+    std::string service_description;
+    std::vector<service_data_field_metadata> fields;
+    std::uint16_t status_code;
+    std::string status_message;
+};
+
 struct decoded_field {
     std::string field;
     std::string type;
@@ -27,6 +49,8 @@ struct decoded_service_data {
     std::string service_label;
     std::vector<std::uint8_t> raw_value;
     std::vector<decoded_field> fields;
+    std::uint16_t status_code;
+    std::string status_message;
 };
 
 /// Look up a Bluetooth SIG company identifier by its 16-bit value.
@@ -49,8 +73,15 @@ struct decoded_service_data {
 /// Look up a Bluetooth Generic Audio metadata LTV type code.
 [[nodiscard]] std::optional<std::string_view> metadata_type_name(std::uint8_t type) noexcept;
 
-/// Decode known service-data payloads into generic field/type/value records.
-[[nodiscard]] std::optional<decoded_service_data> decode_service_data(
+/// Describe a registered service-data packet format without parsing a packet.
+/// Returns HTTP-style status codes such as 200 (described) or 404 (unknown format).
+[[nodiscard]] service_data_format_metadata describe_service_data_format(
+    std::string_view service_uuid);
+
+/// Decode service-data payloads using registered packet definitions.
+/// Returns HTTP-style status codes such as 200 (decoded), 404 (no known format),
+/// or 422 (malformed payload for the known format).
+[[nodiscard]] decoded_service_data decode_service_data(
     std::string_view service_uuid,
     std::span<const std::uint8_t> payload);
 

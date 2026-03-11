@@ -47,13 +47,37 @@ export interface DecodedServiceData {
   service_uuid: string;
   service_label: string;
   raw_value: string;
+  status_code: number;
+  status_message: string;
   fields: DecodedField[];
+}
+
+export interface ServiceDataFormatMetadata {
+  service_uuid: string;
+  service_label: string;
+  service_description: string;
+  status_code: number;
+  status_message: string;
+  fields: ServiceDataFieldMetadata[];
 }
 
 export interface DecodedField {
   field: string;
   type: string;
   value: string;
+}
+
+export interface ServiceDataFieldMetadata {
+  field: string;
+  type: string;
+  enum_match: string;
+  enum_entries: ServiceDataEnumEntryMetadata[];
+}
+
+export interface ServiceDataEnumEntryMetadata {
+  value: number;
+  short_name: string;
+  description: string;
 }
 
 export async function startBleScan(): Promise<void> {
@@ -124,5 +148,13 @@ export async function decodeDaemonAdvertisement(
   return invoke<DecodedServiceData[]>("decode_daemon_advertisement", {
     rawData,
     rawScanResponse,
+  });
+}
+
+export async function describeDaemonServiceDataFormats(
+  serviceUuids: string[]
+): Promise<ServiceDataFormatMetadata[]> {
+  return invoke<ServiceDataFormatMetadata[]>("describe_daemon_service_data_formats", {
+    serviceUuids,
   });
 }

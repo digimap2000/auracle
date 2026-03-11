@@ -138,7 +138,11 @@ std::vector<std::uint8_t> hex_to_bytes(std::string_view hex) {
 
 void print_decoded_advertisement_pretty(const obs_proto::DecodeAdvertisementResponse& response) {
     for (const auto& decoded : response.decoded_service_data()) {
-        std::cout << std::format("{}\n", decoded.service_label());
+        std::cout << std::format(
+            "{} [{} {}]\n",
+            decoded.service_label(),
+            decoded.status_code(),
+            decoded.status_message());
         for (const auto& field : decoded.fields()) {
             std::cout << std::format(
                 "  - {} ({}) = {}\n",

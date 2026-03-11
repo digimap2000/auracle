@@ -10,6 +10,7 @@ pub mod proto {
 }
 
 use proto::inventory::inventory_service_client::InventoryServiceClient;
+use proto::observation::observation_service_client::ObservationServiceClient;
 
 use serde::Serialize;
 use tonic::transport::Channel;
@@ -83,6 +84,14 @@ fn candidate_detail(candidate: &proto::inventory::HardwareCandidate) -> String {
 
 pub struct DaemonClient {
     inventory: InventoryServiceClient<Channel>,
+}
+
+pub fn observation_client() -> ObservationServiceClient<Channel> {
+    static OBSERVATION_CHANNEL: std::sync::OnceLock<Channel> = std::sync::OnceLock::new();
+    let channel = OBSERVATION_CHANNEL
+        .get_or_init(|| Channel::from_static(DEFAULT_DAEMON_ADDR).connect_lazy())
+        .clone();
+    ObservationServiceClient::new(channel)
 }
 
 impl DaemonClient {

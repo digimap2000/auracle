@@ -42,31 +42,29 @@ void append_decoded_service_data(
         const auto field_type = bytes[offset + 1U];
         const auto field = bytes.subspan(offset + 2U, field_len - 1U);
 
-        std::optional<assigned_numbers::decoded_service_data> decoded;
         switch (field_type) {
         case 0x16:
             if (field.size() >= 2U) {
                 const auto uuid = static_cast<std::uint16_t>(field[0] | (field[1U] << 8U));
                 const auto uuid_str = std::format("{:08x}-0000-1000-8000-00805f9b34fb", uuid);
-                decoded = assigned_numbers::decode_service_data(
+                const auto decoded = assigned_numbers::decode_service_data(
                     uuid_str, field.subspan(2U));
+                auto* out = dst->add_decoded_service_data();
+                out->set_service_uuid(decoded.service_uuid);
+                out->set_service_label(decoded.service_label);
+                out->set_raw_value(hex_bytes(decoded.raw_value));
+                out->set_status_code(decoded.status_code);
+                out->set_status_message(decoded.status_message);
+                for (const auto& field_value : decoded.fields) {
+                    auto* out_field = out->add_fields();
+                    out_field->set_field(field_value.field);
+                    out_field->set_type(field_value.type);
+                    out_field->set_value(field_value.value);
+                }
             }
             break;
         default:
             break;
-        }
-
-        if (decoded.has_value()) {
-            auto* out = dst->add_decoded_service_data();
-            out->set_service_uuid(decoded->service_uuid);
-            out->set_service_label(decoded->service_label);
-            out->set_raw_value(hex_bytes(decoded->raw_value));
-            for (const auto& field_value : decoded->fields) {
-                auto* out_field = out->add_fields();
-                out_field->set_field(field_value.field);
-                out_field->set_type(field_value.type);
-                out_field->set_value(field_value.value);
-            }
         }
 
         offset += static_cast<std::size_t>(field_len) + 1U;
@@ -132,6 +130,28 @@ void decode_advertisement_to_proto(
     obs_proto::DecodeAdvertisementResponse* dst) {
     append_decoded_service_data(raw_data, dst);
     append_decoded_service_data(raw_scan_response, dst);
+}
+
+void to_proto(
+    const assigned_numbers::service_data_format_metadata& src,
+    obs_proto::ServiceDataFormatMetadata* dst) {
+    dst->set_service_uuid(src.service_uuid);
+    dst->set_service_label(src.service_label);
+    dst->set_service_description(src.service_description);
+    dst->set_status_code(src.status_code);
+    dst->set_status_message(src.status_message);
+    for (const auto& field : src.fields) {
+        auto* out_field = dst->add_fields();
+        out_field->set_field(field.field);
+        out_field->set_type(field.type);
+        out_field->set_enum_match(field.enum_match);
+        for (const auto& entry : field.enum_entries) {
+            auto* out_entry = out_field->add_enum_entries();
+            out_entry->set_value(entry.value);
+            out_entry->set_short_name(entry.short_name);
+            out_entry->set_description(entry.description);
+        }
+    }
 }
 
 } // namespace auracle::rpc
