@@ -72,7 +72,7 @@ add_library(auracle_rpc
 )
 
 target_link_libraries(auracle_rpc
-  PUBLIC  auracle_inventory auracle_observation gRPC::grpc++ protobuf::libprotobuf
+  PUBLIC  auracle_inventory auracle_observation auracle_assigned_numbers gRPC::grpc++ protobuf::libprotobuf
 )
 
 target_include_directories(auracle_rpc

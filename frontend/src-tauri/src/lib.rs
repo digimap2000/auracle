@@ -4,7 +4,7 @@ mod devices;
 mod error;
 mod serial;
 
-use ble::BluetoothAdapter;
+use ble::{BluetoothAdapter, DecodedField, DecodedServiceData};
 use daemon::scan_bridge::DaemonScanBridge;
 use daemon::{DaemonCandidate, DaemonClient, DaemonUnit};
 use devices::ConnectedDevice;
@@ -149,6 +149,48 @@ async fn get_daemon_candidates() -> Result<Vec<DaemonCandidate>, AuracleError> {
         .map_err(AuracleError::CommandFailed)
 }
 
+#[tauri::command]
+async fn decode_daemon_advertisement(
+    raw_data: Vec<u8>,
+    raw_scan_response: Vec<u8>,
+) -> Result<Vec<DecodedServiceData>, AuracleError> {
+    let channel = tonic::transport::Channel::from_static("http://127.0.0.1:50051")
+        .connect()
+        .await
+        .map_err(|e| AuracleError::ConnectionFailed(format!("Daemon connection failed: {e}")))?;
+
+    let mut client = daemon::proto::observation::observation_service_client::ObservationServiceClient::new(channel);
+    let response = client
+        .decode_advertisement(daemon::proto::observation::DecodeAdvertisementRequest {
+            raw_data,
+            raw_scan_response,
+        })
+        .await
+        .map_err(|e| AuracleError::CommandFailed(format!("DecodeAdvertisement failed: {e}")))?;
+
+    let decoded = response
+        .into_inner()
+        .decoded_service_data
+        .into_iter()
+        .map(|service| DecodedServiceData {
+            service_uuid: service.service_uuid,
+            service_label: service.service_label,
+            raw_value: service.raw_value,
+            fields: service
+                .fields
+                .into_iter()
+                .map(|field| DecodedField {
+                    field: field.field,
+                    r#type: field.r#type,
+                    value: field.value,
+                })
+                .collect(),
+        })
+        .collect();
+
+    Ok(decoded)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -164,6 +206,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             connect_device,
             disconnect_device,
+            decode_daemon_advertisement,
             get_bluetooth_adapter,
             get_connected_devices,
             get_daemon_candidates,

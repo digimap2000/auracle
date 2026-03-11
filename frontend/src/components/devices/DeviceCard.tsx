@@ -45,7 +45,7 @@ export function DeviceCard({
 }: DeviceCardProps) {
   // Resolve services for badge display — include unknown services too
   const resolvedServices = device.services.map((uuid) => {
-    const name = resolveServiceName(uuid);
+    const name = resolveServiceName(uuid, device.service_labels);
     return { uuid, name, isKnown: name !== uuid };
   });
 
@@ -171,7 +171,7 @@ export function DeviceCard({
                 <span className="shrink-0 text-right font-medium">Type</span>
               </div>
               {device.services.map((uuid, i) => {
-                const name = resolveServiceName(uuid);
+                const name = resolveServiceName(uuid, device.service_labels);
                 const isKnown = name !== uuid;
                 const standard = isStandardUuid(uuid);
                 return (

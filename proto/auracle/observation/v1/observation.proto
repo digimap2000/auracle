@@ -4,6 +4,19 @@ package auracle.observation.v1;
 
 option cc_enable_arenas = true;
 
+message DecodedField {
+    string field = 1;
+    string type = 2;
+    string value = 3;
+}
+
+message DecodedServiceData {
+    string service_uuid = 1;
+    string service_label = 2;
+    string raw_value = 3;           // hex string, for example 0x0400
+    repeated DecodedField fields = 4;
+}
+
 // ---------------------------------------------------------------------------
 // BLE advertisement
 // ---------------------------------------------------------------------------
@@ -14,6 +27,7 @@ message BleAdvertisement {
     int32 rssi = 3;                 // received signal strength (dBm)
     int32 tx_power = 4;             // TX power level (dBm), 127 = unknown
     repeated string service_uuids = 5;
+    map<string, string> service_labels = 17; // resolved service labels keyed by UUID
     bytes manufacturer_data = 6;    // raw manufacturer-specific data (after company ID)
     uint32 company_id = 7;          // Bluetooth SIG company identifier
     string address_type = 8;        // public, random, etc when known
@@ -81,9 +95,19 @@ message WatchObservationsRequest {
     bool include_initial_snapshot = 2;
 }
 
+message DecodeAdvertisementRequest {
+    bytes raw_data = 1;
+    bytes raw_scan_response = 2;
+}
+
+message DecodeAdvertisementResponse {
+    repeated DecodedServiceData decoded_service_data = 1;
+}
+
 service ObservationService {
     rpc StartScan(StartScanRequest) returns (StartScanResponse);
     rpc StopScan(StopScanRequest) returns (StopScanResponse);
     rpc ListObservedDevices(ListObservedDevicesRequest) returns (ListObservedDevicesResponse);
     rpc WatchObservations(WatchObservationsRequest) returns (stream ObservationEvent);
+    rpc DecodeAdvertisement(DecodeAdvertisementRequest) returns (DecodeAdvertisementResponse);
 }

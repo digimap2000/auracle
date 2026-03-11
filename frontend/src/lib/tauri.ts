@@ -14,6 +14,7 @@ export interface BleDevice {
   is_connected: boolean;
   tx_power: number | null;
   services: string[];
+  service_labels: Record<string, string>;
   manufacturer_data: ManufacturerData[];
   last_seen: string;
 }
@@ -27,6 +28,7 @@ export interface BlePacket {
   rssi: number;
   tx_power: number | null;
   service_uuids: string[];
+  service_labels: Record<string, string>;
   company_id: number | null;
   company_data: number[];
   address_type: string;
@@ -39,6 +41,19 @@ export interface BlePacket {
   raw_data: number[];
   raw_scan_response: number[];
   timestamp_ms: number;
+}
+
+export interface DecodedServiceData {
+  service_uuid: string;
+  service_label: string;
+  raw_value: string;
+  fields: DecodedField[];
+}
+
+export interface DecodedField {
+  field: string;
+  type: string;
+  value: string;
 }
 
 export async function startBleScan(): Promise<void> {
@@ -100,4 +115,14 @@ export async function startDaemonScan(unitId: string): Promise<void> {
 
 export async function stopDaemonScan(unitId: string): Promise<void> {
   return invoke<void>("stop_daemon_scan", { unitId });
+}
+
+export async function decodeDaemonAdvertisement(
+  rawData: number[],
+  rawScanResponse: number[] = []
+): Promise<DecodedServiceData[]> {
+  return invoke<DecodedServiceData[]>("decode_daemon_advertisement", {
+    rawData,
+    rawScanResponse,
+  });
 }

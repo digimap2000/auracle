@@ -34,6 +34,11 @@ public:
         const obs_proto::WatchObservationsRequest* request,
         grpc::ServerWriter<obs_proto::ObservationEvent>* writer) override;
 
+    grpc::Status DecodeAdvertisement(
+        grpc::ServerContext* context,
+        const obs_proto::DecodeAdvertisementRequest* request,
+        obs_proto::DecodeAdvertisementResponse* response) override;
+
 private:
     observation::ScannerManager& manager_;
 };

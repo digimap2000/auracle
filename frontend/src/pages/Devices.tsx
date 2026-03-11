@@ -41,7 +41,8 @@ import {
   resolveCompanyName,
   resolveServiceName,
 } from "@/lib/ble-utils";
-import type { BleDevice, BlePacket, DaemonUnit } from "@/lib/tauri";
+import { decodeDaemonAdvertisement } from "@/lib/tauri";
+import type { BleDevice, BlePacket, DaemonUnit, DecodedServiceData } from "@/lib/tauri";
 
 const RSSI_WINDOW_SIZE = 6;
 const MAX_PACKETS_IN_VIEW = 300;
@@ -57,6 +58,16 @@ interface DevicesProps {
 
 function canScan(unit: DaemonUnit) {
   return unit.present && unit.capabilities.includes("ble-scan");
+}
+
+interface ResolvedServicePayloadObservation {
+  key: string;
+  serviceUuid: string;
+  serviceLabel: string;
+  rawValue: string;
+  fields: DecodedServiceData["fields"];
+  count: number;
+  lastSeenMs: number;
 }
 
 function fingerprintLabel(stableId: string) {
@@ -278,7 +289,8 @@ export function Devices({ units, bleDevices, blePackets, scanning }: DevicesProp
       stableId: string,
       source: "adv" | "scan-response",
       payload: number[],
-      timestampMs: number
+      timestampMs: number,
+      serviceLabels: Record<string, string>
     ) => {
       if (payload.length === 0) {
         return;
@@ -290,7 +302,7 @@ export function Devices({ units, bleDevices, blePackets, scanning }: DevicesProp
         grouped.set(stableId, fields);
       }
 
-      for (const field of parseAdvertisementStructures(payload)) {
+      for (const field of parseAdvertisementStructures(payload, serviceLabels)) {
         const typeHex = field.type >= 0
           ? `0x${field.type.toString(16).padStart(2, "0").toUpperCase()}`
           : "0x??";
@@ -316,8 +328,8 @@ export function Devices({ units, bleDevices, blePackets, scanning }: DevicesProp
     };
 
     for (const packet of focusedPackets) {
-      ingestFields(packet.stable_id, "adv", packet.raw_data, packet.timestamp_ms);
-      ingestFields(packet.stable_id, "scan-response", packet.raw_scan_response, packet.timestamp_ms);
+      ingestFields(packet.stable_id, "adv", packet.raw_data, packet.timestamp_ms, packet.service_labels);
+      ingestFields(packet.stable_id, "scan-response", packet.raw_scan_response, packet.timestamp_ms, packet.service_labels);
     }
 
     return new Map(
@@ -337,6 +349,17 @@ export function Devices({ units, bleDevices, blePackets, scanning }: DevicesProp
       ])
     );
   }, [focusedPackets]);
+
+  const focusedServiceLabels = useMemo(() => {
+    const labels: Record<string, string> = {};
+    for (const device of focusedDevices) {
+      Object.assign(labels, device.service_labels);
+    }
+    for (const packet of focusedPackets) {
+      Object.assign(labels, packet.service_labels);
+    }
+    return labels;
+  }, [focusedDevices, focusedPackets]);
 
   useEffect(() => {
     if (recentPackets.length === 0) {
@@ -367,12 +390,12 @@ export function Devices({ units, bleDevices, blePackets, scanning }: DevicesProp
     return [...counts.entries()]
       .map(([uuid, count]) => ({
         uuid,
-        label: resolveServiceName(uuid),
+        label: resolveServiceName(uuid, focusedServiceLabels),
         count,
         isStandard: isStandardUuid(uuid),
       }))
       .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
-  }, [focusedDevices]);
+  }, [focusedDevices, focusedServiceLabels]);
 
   const companySummary = useMemo(() => {
     const counts = new Map<number, number>();
@@ -773,7 +796,7 @@ export function Devices({ units, bleDevices, blePackets, scanning }: DevicesProp
                               )}
                               {packet.service_uuids.slice(0, 2).map((uuid) => (
                                 <Badge key={uuid} variant="secondary">
-                                  {resolveServiceName(uuid)}
+                                  {resolveServiceName(uuid, packet.service_labels)}
                                 </Badge>
                               ))}
                               <span>{packet.raw_data.length} B payload</span>
@@ -844,74 +867,7 @@ export function Devices({ units, bleDevices, blePackets, scanning }: DevicesProp
                   </CardHeader>
                   <CardContent className="min-h-0">
                     {selectedPacket ? (
-                      <ScrollArea className="h-[calc(100vh-19rem)]">
-                        <div className="space-y-4 pr-4">
-                          <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
-                            <div className="flex flex-wrap items-center justify-between gap-3">
-                              <div>
-                                <p className="text-sm font-medium">
-                                  {selectedPacket.name !== "Unknown" ? selectedPacket.name : selectedPacket.device_id}
-                                </p>
-                                <p className="font-mono text-xs text-muted-foreground">{selectedPacket.device_id}</p>
-                              </div>
-                              <div className="text-right">
-                                <p className="text-sm font-medium">{selectedPacket.rssi} dBm</p>
-                                <p className="text-xs text-muted-foreground">{formatPacketTimestamp(selectedPacket.timestamp_ms)}</p>
-                              </div>
-                            </div>
-                            <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-                              <MetaPill label="Addr Type" value={selectedPacket.address_type || "unknown"} />
-                              <MetaPill label="SID" value={selectedPacket.sid} />
-                              <MetaPill label="Adv Type" value={selectedPacket.adv_type} />
-                              <MetaPill label="Adv Props" value={`0x${selectedPacket.adv_props.toString(16).toUpperCase()}`} />
-                              <MetaPill label="Interval" value={selectedPacket.interval} />
-                              <MetaPill label="Primary PHY" value={selectedPacket.primary_phy} />
-                              <MetaPill label="Secondary PHY" value={selectedPacket.secondary_phy} />
-                              <MetaPill label="Tx Power" value={selectedPacket.tx_power ?? "unknown"} />
-                            </div>
-                          </div>
-
-                          <PacketPayloadSection
-                            title="Advertising Payload"
-                            description={`${selectedPacket.raw_data.length} bytes`}
-                            bytes={selectedPacket.raw_data}
-                          />
-
-                          {selectedPacket.raw_scan_response.length > 0 && (
-                            <PacketPayloadSection
-                              title="Scan Response"
-                              description={`${selectedPacket.raw_scan_response.length} bytes`}
-                              bytes={selectedPacket.raw_scan_response}
-                            />
-                          )}
-
-                          <Card className="border-border/60">
-                            <CardHeader>
-                              <CardTitle>Decoded Fields</CardTitle>
-                              <CardDescription>
-                                Best-effort interpretation of AD structures in the selected packet.
-                              </CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-2">
-                              {parseAdvertisementStructures(selectedPacket.raw_data).map((field) => (
-                                <div key={`${field.offset}-${field.type}`} className="rounded-md border border-border/60 px-3 py-2">
-                                  <div className="flex items-center justify-between gap-3">
-                                    <p className="text-sm font-medium">{field.typeName}</p>
-                                    <span className="font-mono text-xs text-muted-foreground">
-                                      offset {field.offset} · len {field.length}
-                                    </span>
-                                  </div>
-                                  <p className="mt-1 text-sm text-muted-foreground">{field.summary}</p>
-                                  <p className="mt-1 font-mono text-xs text-muted-foreground">{field.hex || "No field data"}</p>
-                                </div>
-                              ))}
-                              {selectedPacket.raw_data.length === 0 && (
-                                <p className="text-sm text-muted-foreground">No raw payload available for this packet.</p>
-                              )}
-                            </CardContent>
-                          </Card>
-                        </div>
-                      </ScrollArea>
+                      <PacketInspector packet={selectedPacket} scrollClassName="h-[calc(100vh-19rem)]" />
                     ) : (
                       <p className="text-sm text-muted-foreground">Select a packet to inspect it.</p>
                     )}
@@ -1072,7 +1028,7 @@ function DeviceFocusView({
                             >
                               <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0">
-                                  <p className="truncate text-sm font-medium">{resolveServiceName(uuid)}</p>
+                                  <p className="truncate text-sm font-medium">{resolveServiceName(uuid, device.service_labels)}</p>
                                   <p className="truncate font-mono text-xs text-muted-foreground">{uuid}</p>
                                 </div>
                                 <Badge variant={isStandardUuid(uuid) ? "secondary" : "outline"}>
@@ -1089,20 +1045,11 @@ function DeviceFocusView({
                   <ResizablePanel defaultSize={52} minSize={24}>
                     <div className="h-full p-4">
                       {selectedServiceUuidValue ? (
-                        <div className="space-y-3">
-                          <div className="rounded-md border border-border/60 px-3 py-3">
-                            <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Service Name</p>
-                            <p className="mt-1 text-sm font-medium">{resolveServiceName(selectedServiceUuidValue)}</p>
-                          </div>
-                          <div className="rounded-md border border-border/60 px-3 py-3">
-                            <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">UUID</p>
-                            <p className="mt-1 break-all font-mono text-sm">{selectedServiceUuidValue}</p>
-                          </div>
-                          <div className="rounded-md border border-border/60 px-3 py-3">
-                            <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Classification</p>
-                            <p className="mt-1 text-sm">{isStandardUuid(selectedServiceUuidValue) ? "Bluetooth SIG base UUID" : "Custom / vendor UUID"}</p>
-                          </div>
-                        </div>
+                        <SelectedServiceInspector
+                          packets={packets}
+                          serviceLabels={device.service_labels}
+                          serviceUuid={selectedServiceUuidValue}
+                        />
                       ) : (
                         <p className="text-sm text-muted-foreground">Select a service to inspect it.</p>
                       )}
@@ -1287,57 +1234,7 @@ function DeviceFocusView({
           </CardHeader>
           <CardContent className="min-h-0">
             {selectedPacket ? (
-              <ScrollArea className="h-[calc(100vh-31rem)] min-h-72">
-                <div className="space-y-4 pr-4">
-                  <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
-                    <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-                      <MetaPill label="Addr Type" value={selectedPacket.address_type || "unknown"} />
-                      <MetaPill label="SID" value={selectedPacket.sid} />
-                      <MetaPill label="Adv Type" value={selectedPacket.adv_type} />
-                      <MetaPill label="Adv Props" value={`0x${selectedPacket.adv_props.toString(16).toUpperCase()}`} />
-                      <MetaPill label="Interval" value={selectedPacket.interval} />
-                      <MetaPill label="Primary PHY" value={selectedPacket.primary_phy} />
-                      <MetaPill label="Secondary PHY" value={selectedPacket.secondary_phy} />
-                      <MetaPill label="Tx Power" value={selectedPacket.tx_power ?? "unknown"} />
-                    </div>
-                  </div>
-
-                  <PacketPayloadSection
-                    title="Advertising Payload"
-                    description={`${selectedPacket.raw_data.length} bytes`}
-                    bytes={selectedPacket.raw_data}
-                  />
-
-                  {selectedPacket.raw_scan_response.length > 0 && (
-                    <PacketPayloadSection
-                      title="Scan Response"
-                      description={`${selectedPacket.raw_scan_response.length} bytes`}
-                      bytes={selectedPacket.raw_scan_response}
-                    />
-                  )}
-
-                  <Card className="border-border/60">
-                    <CardHeader>
-                      <CardTitle>Decoded Fields</CardTitle>
-                      <CardDescription>AD structures decoded from the selected packet payload.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-2">
-                      {parseAdvertisementStructures(selectedPacket.raw_data).map((field) => (
-                        <div key={`${field.offset}-${field.type}`} className="rounded-md border border-border/60 px-3 py-2">
-                          <div className="flex items-center justify-between gap-3">
-                            <p className="text-sm font-medium">{field.typeName}</p>
-                            <span className="font-mono text-xs text-muted-foreground">
-                              offset {field.offset} · len {field.length}
-                            </span>
-                          </div>
-                          <p className="mt-1 text-sm text-muted-foreground">{field.summary}</p>
-                          <p className="mt-1 font-mono text-xs text-muted-foreground">{field.hex || "No field data"}</p>
-                        </div>
-                      ))}
-                    </CardContent>
-                  </Card>
-                </div>
-              </ScrollArea>
+              <PacketInspector packet={selectedPacket} scrollClassName="h-[calc(100vh-31rem)] min-h-72" />
             ) : (
               <p className="text-sm text-muted-foreground">Select a packet to inspect it.</p>
             )}
@@ -1363,6 +1260,418 @@ function MetaPill({ label, value }: { label: string; value: number | string }) {
       <span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">{label}</span>
       <p className="truncate text-sm text-foreground">{value}</p>
     </div>
+  );
+}
+
+function SelectedServiceInspector({
+  serviceUuid,
+  serviceLabels,
+  packets,
+}: {
+  serviceUuid: string;
+  serviceLabels: Record<string, string>;
+  packets: BlePacket[];
+}) {
+  const [payloads, setPayloads] = useState<ResolvedServicePayloadObservation[]>([]);
+  const [decodeState, setDecodeState] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [decodeError, setDecodeError] = useState<string | null>(null);
+
+  const normalizedServiceUuid = serviceUuid.toLowerCase();
+  const resolvedServiceName = resolveServiceName(serviceUuid, serviceLabels);
+  const serviceUuid16 = useMemo(() => parseBluetoothSigUuid16(serviceUuid), [serviceUuid]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (serviceUuid16 == null) {
+      setPayloads([]);
+      setDecodeState("ready");
+      setDecodeError(null);
+      return;
+    }
+
+    const candidatePackets = packets.filter((packet) =>
+      payloadHasServiceDataForUuid(packet.raw_data, serviceUuid16)
+      || payloadHasServiceDataForUuid(packet.raw_scan_response, serviceUuid16)
+    );
+
+    if (candidatePackets.length === 0) {
+      setPayloads([]);
+      setDecodeState("ready");
+      setDecodeError(null);
+      return;
+    }
+
+    setDecodeState("loading");
+    setDecodeError(null);
+
+    Promise.all(candidatePackets.map(async (packet) => ({
+      packet,
+      decoded: await decodeDaemonAdvertisement(packet.raw_data, packet.raw_scan_response),
+    })))
+      .then((results) => {
+        if (cancelled) {
+          return;
+        }
+
+        const grouped = new Map<string, ResolvedServicePayloadObservation>();
+
+        for (const { packet, decoded } of results) {
+          for (const service of decoded) {
+            if (service.service_uuid.toLowerCase() !== normalizedServiceUuid) {
+              continue;
+            }
+
+            const key = service.raw_value;
+            const existing = grouped.get(key);
+            if (existing) {
+              existing.count += 1;
+              existing.lastSeenMs = Math.max(existing.lastSeenMs, packet.timestamp_ms);
+              continue;
+            }
+
+            grouped.set(key, {
+              key,
+              serviceUuid: service.service_uuid,
+              serviceLabel: service.service_label,
+              rawValue: service.raw_value,
+              fields: service.fields,
+              count: 1,
+              lastSeenMs: packet.timestamp_ms,
+            });
+          }
+        }
+
+        setPayloads(
+          [...grouped.values()].sort((a, b) =>
+            b.lastSeenMs - a.lastSeenMs
+            || b.count - a.count
+            || a.rawValue.localeCompare(b.rawValue)
+          )
+        );
+        setDecodeState("ready");
+      })
+      .catch((error: unknown) => {
+        if (cancelled) {
+          return;
+        }
+
+        setPayloads([]);
+        setDecodeState("error");
+        setDecodeError(error instanceof Error ? error.message : String(error));
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [normalizedServiceUuid, packets, serviceUuid16]);
+
+  return (
+    <div className="space-y-3">
+      <div className="rounded-md border border-border/60 px-3 py-3">
+        <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Service Name</p>
+        <p className="mt-1 text-sm font-medium">{resolvedServiceName}</p>
+      </div>
+      <div className="rounded-md border border-border/60 px-3 py-3">
+        <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">UUID</p>
+        <p className="mt-1 break-all font-mono text-sm">{serviceUuid}</p>
+      </div>
+      <div className="rounded-md border border-border/60 px-3 py-3">
+        <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Classification</p>
+        <p className="mt-1 text-sm">{isStandardUuid(serviceUuid) ? "Bluetooth SIG base UUID" : "Custom / vendor UUID"}</p>
+      </div>
+      <div className="rounded-md border border-border/60 px-3 py-3">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Service Payload</p>
+          {payloads.length > 0 && (
+            <Badge variant="secondary">{payloads.length} variant{payloads.length === 1 ? "" : "s"}</Badge>
+          )}
+        </div>
+
+        {serviceUuid16 == null ? (
+          <p className="mt-2 text-sm text-muted-foreground">
+            No daemon-backed payload resolver is available for this UUID form yet.
+          </p>
+        ) : decodeState === "loading" ? (
+          <p className="mt-2 text-sm text-muted-foreground">
+            Resolving service payloads from recent packets...
+          </p>
+        ) : decodeState === "error" ? (
+          <p className="mt-2 text-sm text-destructive">
+            Failed to resolve service payloads: {decodeError ?? "unknown error"}
+          </p>
+        ) : payloads.length === 0 ? (
+          <div className="mt-2 space-y-2">
+            <p className="text-sm text-muted-foreground">
+              No decoded service-data payloads were observed for this service in the current packet window.
+            </p>
+            <p className="text-xs text-muted-foreground">
+              The service may be advertised only as a UUID list entry, or the daemon may not have a decoder for its payload format yet.
+            </p>
+          </div>
+        ) : (
+          <div className="mt-3 space-y-3">
+            {payloads.map((payload) => (
+              <div key={payload.key} className="rounded-md border border-border/60 px-3 py-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">{payload.serviceLabel}</p>
+                    <p className="font-mono text-xs text-muted-foreground">{payload.serviceUuid}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="secondary">{payload.count}x</Badge>
+                  </div>
+                </div>
+
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  <div className="rounded-md border border-border/60 px-3 py-3">
+                    <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Raw Value</p>
+                  <p className="mt-1 break-all font-mono text-xs text-muted-foreground">{payload.rawValue}</p>
+                  </div>
+                  <div className="rounded-md border border-border/60 px-3 py-3">
+                    <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Last Seen</p>
+                    <p className="mt-1 text-sm">{formatPacketTimestamp(payload.lastSeenMs)}</p>
+                  </div>
+                </div>
+
+                <div className="mt-3 space-y-2">
+                  {payload.fields.map((field, index) => (
+                    <div key={`${payload.key}:${field.field}:${index}`} className="rounded-md border border-border/60 px-3 py-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-medium">{field.field}</p>
+                        <Badge variant="secondary">{field.type}</Badge>
+                      </div>
+                      <p className="mt-1 break-all text-sm text-muted-foreground">{field.value}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PacketInspector({
+  packet,
+  scrollClassName,
+}: {
+  packet: BlePacket;
+  scrollClassName: string;
+}) {
+  const [decodedServiceData, setDecodedServiceData] = useState<DecodedServiceData[]>([]);
+  const [decodeState, setDecodeState] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [decodeError, setDecodeError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    setDecodeState("loading");
+    setDecodeError(null);
+
+    decodeDaemonAdvertisement(packet.raw_data, packet.raw_scan_response)
+      .then((decoded) => {
+        if (cancelled) {
+          return;
+        }
+        setDecodedServiceData(decoded);
+        setDecodeState("ready");
+      })
+      .catch((error: unknown) => {
+        if (cancelled) {
+          return;
+        }
+        setDecodedServiceData([]);
+        setDecodeState("error");
+        setDecodeError(error instanceof Error ? error.message : String(error));
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [packet.id, packet.raw_data, packet.raw_scan_response]);
+
+  return (
+    <ScrollArea className={scrollClassName}>
+      <div className="space-y-4 pr-4">
+        <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium">
+                {packet.name !== "Unknown" ? packet.name : packet.device_id}
+              </p>
+              <p className="font-mono text-xs text-muted-foreground">{packet.device_id}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-sm font-medium">{packet.rssi} dBm</p>
+              <p className="text-xs text-muted-foreground">{formatPacketTimestamp(packet.timestamp_ms)}</p>
+            </div>
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+            <MetaPill label="Addr Type" value={packet.address_type || "unknown"} />
+            <MetaPill label="SID" value={packet.sid} />
+            <MetaPill label="Adv Type" value={packet.adv_type} />
+            <MetaPill label="Adv Props" value={`0x${packet.adv_props.toString(16).toUpperCase()}`} />
+            <MetaPill label="Interval" value={packet.interval} />
+            <MetaPill label="Primary PHY" value={packet.primary_phy} />
+            <MetaPill label="Secondary PHY" value={packet.secondary_phy} />
+            <MetaPill label="Tx Power" value={packet.tx_power ?? "unknown"} />
+          </div>
+        </div>
+
+        <PacketPayloadSection
+          title="Advertising Payload"
+          description={`${packet.raw_data.length} bytes`}
+          bytes={packet.raw_data}
+        />
+
+        {packet.raw_scan_response.length > 0 && (
+          <PacketPayloadSection
+            title="Scan Response"
+            description={`${packet.raw_scan_response.length} bytes`}
+            bytes={packet.raw_scan_response}
+          />
+        )}
+
+        <AdvertisementStructuresSection
+          title="Advertising AD Structures"
+          description="Resolved AD structures from the advertising payload."
+          bytes={packet.raw_data}
+          serviceLabels={packet.service_labels}
+          emptyMessage="No raw advertising payload available for this packet."
+        />
+
+        {packet.raw_scan_response.length > 0 && (
+          <AdvertisementStructuresSection
+            title="Scan Response AD Structures"
+            description="Resolved AD structures from the scan response payload."
+            bytes={packet.raw_scan_response}
+            serviceLabels={packet.service_labels}
+            emptyMessage="No scan response payload available for this packet."
+          />
+        )}
+
+        <DecodedServiceDataSection
+          decodeError={decodeError}
+          decodeState={decodeState}
+          decodedServiceData={decodedServiceData}
+        />
+      </div>
+    </ScrollArea>
+  );
+}
+
+function AdvertisementStructuresSection({
+  title,
+  description,
+  bytes,
+  serviceLabels,
+  emptyMessage,
+}: {
+  title: string;
+  description: string;
+  bytes: number[];
+  serviceLabels: Record<string, string>;
+  emptyMessage: string;
+}) {
+  const fields = useMemo(
+    () => parseAdvertisementStructures(bytes, serviceLabels),
+    [bytes, serviceLabels]
+  );
+
+  return (
+    <Card className="border-border/60">
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+        <CardDescription>{description}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {fields.map((field) => (
+          <div key={`${field.offset}-${field.type}-${field.hex}`} className="rounded-md border border-border/60 px-3 py-2">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm font-medium">{field.typeName}</p>
+              <span className="font-mono text-xs text-muted-foreground">
+                offset {field.offset} · len {field.length}
+              </span>
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">{field.summary}</p>
+            <p className="mt-1 font-mono text-xs text-muted-foreground">{field.hex || "No field data"}</p>
+          </div>
+        ))}
+        {fields.length === 0 && (
+          <p className="text-sm text-muted-foreground">{emptyMessage}</p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function DecodedServiceDataSection({
+  decodedServiceData,
+  decodeState,
+  decodeError,
+}: {
+  decodedServiceData: DecodedServiceData[];
+  decodeState: "idle" | "loading" | "ready" | "error";
+  decodeError: string | null;
+}) {
+  return (
+    <Card className="border-border/60">
+      <CardHeader>
+        <CardTitle>Resolved Service Data</CardTitle>
+        <CardDescription>
+          Backend decode for known service-data payloads such as Broadcast Audio Announcement and Public Broadcast Announcement.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {decodeState === "loading" && (
+          <p className="text-sm text-muted-foreground">Resolving service-data payloads via the daemon...</p>
+        )}
+        {decodeState === "error" && (
+          <p className="text-sm text-destructive">
+            Failed to resolve service-data payloads: {decodeError ?? "unknown error"}
+          </p>
+        )}
+        {decodeState === "ready" && decodedServiceData.length === 0 && (
+          <p className="text-sm text-muted-foreground">No known service-data payloads were decoded from this packet.</p>
+        )}
+        {decodedServiceData.map((service) => (
+          <div key={`${service.service_uuid}:${service.raw_value}`} className="rounded-md border border-border/60 px-3 py-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-medium">{service.service_label}</p>
+                <p className="break-all font-mono text-xs text-muted-foreground">{service.service_uuid}</p>
+              </div>
+            </div>
+
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              <div className="rounded-md border border-border/60 px-3 py-3">
+                <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Raw Value</p>
+                <p className="mt-1 break-all font-mono text-xs text-muted-foreground">{service.raw_value}</p>
+              </div>
+              <div className="rounded-md border border-border/60 px-3 py-3">
+                <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Decoded Fields</p>
+                <p className="mt-1 text-sm">{service.fields.length}</p>
+              </div>
+            </div>
+
+            <div className="mt-3 space-y-2">
+              {service.fields.map((field, index) => (
+                <div key={`${service.service_uuid}:${field.field}:${index}`} className="rounded-md border border-border/60 px-3 py-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-medium">{field.field}</p>
+                    <Badge variant="secondary">{field.type}</Badge>
+                  </div>
+                  <p className="mt-1 break-all text-sm text-muted-foreground">{field.value}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -1395,4 +1704,41 @@ function PacketPayloadSection({
       </CardContent>
     </Card>
   );
+}
+
+function parseBluetoothSigUuid16(uuid: string): number | null {
+  const match = uuid.toLowerCase().match(/^0000([0-9a-f]{4})-0000-1000-8000-00805f9b34fb$/);
+  const value = match?.[1];
+  if (!value) {
+    return null;
+  }
+  return Number.parseInt(value, 16);
+}
+
+function payloadHasServiceDataForUuid(bytes: number[], serviceUuid16: number): boolean {
+  let offset = 0;
+
+  while (offset < bytes.length) {
+    const fieldLength = bytes[offset] ?? 0;
+    if (fieldLength === 0) {
+      break;
+    }
+
+    if (offset + 1 + fieldLength > bytes.length) {
+      break;
+    }
+
+    const type = bytes[offset + 1] ?? 0;
+    const field = bytes.slice(offset + 2, offset + 1 + fieldLength);
+    if (type === 0x16 && field.length >= 2) {
+      const uuid = (field[0] ?? 0) | ((field[1] ?? 0) << 8);
+      if (uuid === serviceUuid16) {
+        return true;
+      }
+    }
+
+    offset += fieldLength + 1;
+  }
+
+  return false;
 }

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
 /// The host machine's Bluetooth adapter.
@@ -19,6 +21,7 @@ pub struct BleDevice {
     pub is_connected: bool,
     pub tx_power: Option<i16>,
     pub services: Vec<String>,
+    pub service_labels: HashMap<String, String>,
     pub manufacturer_data: Vec<ManufacturerData>,
     pub last_seen: String,
 }
@@ -34,6 +37,7 @@ pub struct BlePacket {
     pub rssi: i16,
     pub tx_power: Option<i16>,
     pub service_uuids: Vec<String>,
+    pub service_labels: HashMap<String, String>,
     pub company_id: Option<u16>,
     pub company_data: Vec<u8>,
     pub address_type: String,
@@ -46,6 +50,21 @@ pub struct BlePacket {
     pub raw_data: Vec<u8>,
     pub raw_scan_response: Vec<u8>,
     pub timestamp_ms: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DecodedServiceData {
+    pub service_uuid: String,
+    pub service_label: String,
+    pub raw_value: String,
+    pub fields: Vec<DecodedField>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DecodedField {
+    pub field: String,
+    pub r#type: String,
+    pub value: String,
 }
 
 /// Manufacturer-specific advertisement data.

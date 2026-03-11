@@ -21,8 +21,14 @@ export interface CompanyOption {
   label: string;
 }
 
-export function resolveServiceName(uuid: string): string {
-  return KNOWN_SERVICES[uuid.toLowerCase()] ?? uuid;
+export function resolveServiceName(
+  uuid: string,
+  serviceLabels: Record<string, string> = {}
+): string {
+  return serviceLabels[uuid]
+    ?? serviceLabels[uuid.toLowerCase()]
+    ?? KNOWN_SERVICES[uuid.toLowerCase()]
+    ?? uuid;
 }
 
 export function resolveCompanyName(id: number): string | null {
@@ -168,7 +174,10 @@ export interface AdvertisementStructure {
   summary: string;
 }
 
-export function parseAdvertisementStructures(bytes: number[]): AdvertisementStructure[] {
+export function parseAdvertisementStructures(
+  bytes: number[],
+  serviceLabels: Record<string, string> = {}
+): AdvertisementStructure[] {
   const structures: AdvertisementStructure[] = [];
   let offset = 0;
 
@@ -208,7 +217,7 @@ export function parseAdvertisementStructures(bytes: number[]): AdvertisementStru
       case 0x03:
         summary = Array.from({ length: Math.floor(field.length / 2) }, (_, index) => {
           const uuid = uuid16ToString(littleEndian16(field.slice(index * 2, index * 2 + 2)));
-          return resolveServiceName(uuid);
+          return resolveServiceName(uuid, serviceLabels);
         }).join(", ");
         break;
       case 0x04:
@@ -222,13 +231,13 @@ export function parseAdvertisementStructures(bytes: number[]): AdvertisementStru
       case 0x07:
         summary = Array.from({ length: Math.floor(field.length / 16) }, (_, index) => {
           const uuid = uuid128ToString(field.slice(index * 16, index * 16 + 16));
-          return resolveServiceName(uuid);
+          return resolveServiceName(uuid, serviceLabels);
         }).join(", ");
         break;
       case 0x16:
         if (field.length >= 2) {
           const uuid = uuid16ToString(littleEndian16(field.slice(0, 2)));
-          summary = `${resolveServiceName(uuid)} | ${formatHexBytes(field.slice(2))}`;
+          summary = `${resolveServiceName(uuid, serviceLabels)} | ${formatHexBytes(field.slice(2))}`;
         }
         break;
       case 0x20:
@@ -240,7 +249,7 @@ export function parseAdvertisementStructures(bytes: number[]): AdvertisementStru
       case 0x21:
         if (field.length >= 16) {
           const uuid = uuid128ToString(field.slice(0, 16));
-          summary = `${resolveServiceName(uuid)} | ${formatHexBytes(field.slice(16))}`;
+          summary = `${resolveServiceName(uuid, serviceLabels)} | ${formatHexBytes(field.slice(16))}`;
         }
         break;
       case 0x19:

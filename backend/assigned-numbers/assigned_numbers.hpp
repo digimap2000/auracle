@@ -9,9 +9,25 @@
 
 #include <cstdint>
 #include <optional>
+#include <span>
+#include <string>
 #include <string_view>
+#include <vector>
 
 namespace auracle::assigned_numbers {
+
+struct decoded_field {
+    std::string field;
+    std::string type;
+    std::string value;
+};
+
+struct decoded_service_data {
+    std::string service_uuid;
+    std::string service_label;
+    std::vector<std::uint8_t> raw_value;
+    std::vector<decoded_field> fields;
+};
 
 /// Look up a Bluetooth SIG company identifier by its 16-bit value.
 [[nodiscard]] std::optional<std::string_view> company_name(std::uint16_t id) noexcept;
@@ -19,10 +35,23 @@ namespace auracle::assigned_numbers {
 /// Look up a Bluetooth SIG 16-bit service UUID.
 [[nodiscard]] std::optional<std::string_view> service_name(std::uint16_t uuid) noexcept;
 
+/// Look up a Bluetooth SIG service name from a canonical UUID string.
+/// Supports both 16-bit values (for example "1852") and SIG base UUIDs
+/// (for example "00001852-0000-1000-8000-00805f9b34fb").
+[[nodiscard]] std::optional<std::string_view> service_name(std::string_view uuid) noexcept;
+
 /// Look up a Bluetooth SIG 16-bit characteristic UUID.
 [[nodiscard]] std::optional<std::string_view> characteristic_name(std::uint16_t uuid) noexcept;
 
 /// Look up a Bluetooth SIG AD Type code.
 [[nodiscard]] std::optional<std::string_view> ad_type_name(std::uint8_t type) noexcept;
+
+/// Look up a Bluetooth Generic Audio metadata LTV type code.
+[[nodiscard]] std::optional<std::string_view> metadata_type_name(std::uint8_t type) noexcept;
+
+/// Decode known service-data payloads into generic field/type/value records.
+[[nodiscard]] std::optional<decoded_service_data> decode_service_data(
+    std::string_view service_uuid,
+    std::span<const std::uint8_t> payload);
 
 } // namespace auracle::assigned_numbers

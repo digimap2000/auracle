@@ -26,6 +26,13 @@ set(ASSIGNED_NUMBERS_YAML_DEPS
   "${ASSIGNED_NUMBERS_INPUT_DIR}/core/ad_types.yaml"
 )
 
+file(GLOB ASSIGNED_NUMBERS_METADATA_LTV_YAML_DEPS
+  "${ASSIGNED_NUMBERS_INPUT_DIR}/profiles_and_services/generic_audio/metadata_ltv/*.yaml")
+
+list(APPEND ASSIGNED_NUMBERS_YAML_DEPS
+  ${ASSIGNED_NUMBERS_METADATA_LTV_YAML_DEPS}
+)
+
 set(ASSIGNED_NUMBERS_GENERATED_SRCS
   "${ASSIGNED_NUMBERS_GEN_DIR}/assigned_numbers_data.cpp"
 )
@@ -44,6 +51,7 @@ add_custom_command(
 # auracle_assigned_numbers library
 # ---------------------------------------------------------------------------
 add_library(auracle_assigned_numbers
+  assigned_numbers.cpp
   ${ASSIGNED_NUMBERS_GENERATED_SRCS}
 )
 

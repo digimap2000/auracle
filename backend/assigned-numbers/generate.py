@@ -71,6 +71,44 @@ def _parse_pairs(
     return entries
 
 
+def _titleize_words(stem: str) -> str:
+    special = {
+        "ccid": "CCID",
+        "uri": "URI",
+    }
+    words = []
+    for part in stem.split("_"):
+        words.append(special.get(part, part.capitalize()))
+    return " ".join(words)
+
+
+def _parse_metadata_ltv_types(directory: Path) -> list[tuple[int, str]]:
+    entries: list[tuple[int, str]] = []
+
+    for filepath in sorted(directory.glob("*.yaml")):
+        with filepath.open(encoding="utf-8") as fh:
+            data = yaml.safe_load(fh)
+
+        items = data.get("supported_ltv_structure", [])
+        type_value = None
+        for item in items:
+            if item.get("parameter") == "Type":
+                raw_value = item.get("value")
+                if isinstance(raw_value, str) and raw_value.startswith("0x"):
+                    type_value = int(raw_value, 16)
+                elif isinstance(raw_value, int):
+                    type_value = raw_value
+                break
+
+        if type_value is None:
+            continue
+
+        entries.append((type_value, _titleize_words(filepath.stem)))
+
+    entries.sort(key=lambda e: e[0])
+    return entries
+
+
 # ---------------------------------------------------------------------------
 # C++ code generation
 # ---------------------------------------------------------------------------
@@ -174,6 +212,9 @@ def main() -> None:
         input_dir / "core" / "ad_types.yaml",
         root_key="ad_types",
     )
+    metadata_types = _parse_metadata_ltv_types(
+        input_dir / "profiles_and_services" / "generic_audio" / "metadata_ltv"
+    )
 
     # Sanity checks
     if len(companies) < 3000:
@@ -200,6 +241,7 @@ def main() -> None:
         _emit_array(characteristics, "kCharacteristicUuids", "entry16", 4)
     )
     parts.append(_emit_array(ad_types, "kAdTypes", "entry8", 2))
+    parts.append(_emit_array(metadata_types, "kMetadataTypes", "entry8", 2))
 
     parts.append("} // anonymous namespace\n")
 
@@ -216,6 +258,9 @@ def main() -> None:
     )
     parts.append(
         _emit_function("ad_type_name", "std::uint8_t", "kAdTypes")
+    )
+    parts.append(
+        _emit_function("metadata_type_name", "std::uint8_t", "kMetadataTypes")
     )
 
     parts.append("} // namespace auracle::assigned_numbers\n")

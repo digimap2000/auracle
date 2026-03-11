@@ -100,4 +100,22 @@ grpc::Status ObservationServiceImpl::WatchObservations(
     return grpc::Status::OK;
 }
 
+grpc::Status ObservationServiceImpl::DecodeAdvertisement(
+    grpc::ServerContext* /*context*/,
+    const obs_proto::DecodeAdvertisementRequest* request,
+    obs_proto::DecodeAdvertisementResponse* response) {
+
+    const auto raw_data = std::span{
+        reinterpret_cast<const std::uint8_t*>(request->raw_data().data()),
+        request->raw_data().size(),
+    };
+    const auto raw_scan_response = std::span{
+        reinterpret_cast<const std::uint8_t*>(request->raw_scan_response().data()),
+        request->raw_scan_response().size(),
+    };
+
+    decode_advertisement_to_proto(raw_data, raw_scan_response, response);
+    return grpc::Status::OK;
+}
+
 } // namespace auracle::rpc

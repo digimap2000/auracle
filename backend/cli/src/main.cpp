@@ -27,6 +27,7 @@ void print_usage() {
         << "  inventory watch   stream inventory events from the daemon\n"
         << "  scan list <id>    show retained BLE scan results for a unit\n"
         << "  scan watch <id>   stream BLE advertisements from a unit\n"
+        << "  scan decode       decode raw advertising payloads via the daemon\n"
         << "\n"
         << "common options:\n"
         << "  --server <addr>   daemon address (default: 127.0.0.1:50051)\n"
@@ -47,7 +48,12 @@ void print_usage() {
         << "\n"
         << "scan watch options:\n"
         << "  --initial         include the retained snapshot before live events\n"
-        << "  --no-duplicates   only report first advertisement per device\n";
+        << "  --no-duplicates   only report first advertisement per device\n"
+        << "\n"
+        << "scan decode options:\n"
+        << "  --raw <hex>       raw advertising payload bytes\n"
+        << "  --scan-response <hex>\n"
+        << "                   raw scan response payload bytes\n";
 }
 
 int run_list_main(int argc, char* argv[]) {
@@ -180,6 +186,40 @@ int run_scan_list_main(int argc, char* argv[]) {
     return auracle::cli::run_scan_list(opts);
 }
 
+int run_scan_decode_main(int argc, char* argv[]) {
+    auracle::cli::ScanOptions opts;
+
+    for (int i = 3; i < argc; ++i) {
+        const std::string_view arg{argv[i]};
+
+        if (arg == "--server" && i + 1 < argc) {
+            opts.server = argv[++i];
+        } else if (arg == "--raw" && i + 1 < argc) {
+            opts.raw_data_hex = argv[++i];
+        } else if (arg == "--scan-response" && i + 1 < argc) {
+            opts.raw_scan_response_hex = argv[++i];
+        } else if (arg == "--format" && i + 1 < argc) {
+            if (!parse_format(argv[++i], opts.format)) {
+                std::cerr << "unknown format: " << argv[i] << "\n";
+                return 2;
+            }
+        } else if (arg == "--verbose") {
+            opts.verbose = true;
+        } else {
+            std::cerr << "unknown option: " << arg << "\n";
+            print_usage();
+            return 2;
+        }
+    }
+
+    if (opts.raw_data_hex.empty() && opts.raw_scan_response_hex.empty()) {
+        std::cerr << "usage: auracle scan decode --raw <hex> [--scan-response <hex>] [options]\n";
+        return 2;
+    }
+
+    return auracle::cli::run_scan_decode(opts);
+}
+
 } // namespace
 
 int main(int argc, char* argv[]) {
@@ -197,6 +237,7 @@ int main(int argc, char* argv[]) {
     } else if (cmd == "scan") {
         if (sub == "list")  return run_scan_list_main(argc, argv);
         if (sub == "watch") return run_scan_watch_main(argc, argv);
+        if (sub == "decode") return run_scan_decode_main(argc, argv);
     }
 
     std::cerr << "unknown command: " << cmd << " " << sub << "\n";

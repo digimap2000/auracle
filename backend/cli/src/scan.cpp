@@ -38,12 +38,19 @@ void print_advertisement_pretty(const obs_proto::ObservationEvent& event) {
         std::cout << "  svc=[";
         for (int i = 0; i < adv.service_uuids_size(); ++i) {
             if (i > 0) std::cout << ",";
-            std::cout << adv.service_uuids(i);
+            const auto& uuid = adv.service_uuids(i);
+            const auto label_it = adv.service_labels().find(uuid);
+            if (label_it != adv.service_labels().end()) {
+                std::cout << std::format("{} ({})", label_it->second, uuid);
+            } else {
+                std::cout << uuid;
+            }
         }
         std::cout << "]";
     }
 
     std::cout << "\n";
+
 }
 
 void print_advertisement_json(const obs_proto::ObservationEvent& event) {
@@ -76,12 +83,19 @@ void print_observed_device_pretty(const obs_proto::ObservedBleDevice& device) {
         std::cout << "  svc=[";
         for (int i = 0; i < adv.service_uuids_size(); ++i) {
             if (i > 0) std::cout << ",";
-            std::cout << adv.service_uuids(i);
+            const auto& uuid = adv.service_uuids(i);
+            const auto label_it = adv.service_labels().find(uuid);
+            if (label_it != adv.service_labels().end()) {
+                std::cout << std::format("{} ({})", label_it->second, uuid);
+            } else {
+                std::cout << uuid;
+            }
         }
         std::cout << "]";
     }
 
     std::cout << "\n";
+
 }
 
 void print_observed_device_json(const obs_proto::ObservedBleDevice& device) {
@@ -89,6 +103,57 @@ void print_observed_device_json(const obs_proto::ObservedBleDevice& device) {
     options.always_print_fields_with_no_presence = true;
     std::string json;
     auto status = google::protobuf::util::MessageToJsonString(device, &json, options);
+    if (status.ok()) {
+        std::cout << json << '\n';
+    }
+}
+
+std::vector<std::uint8_t> hex_to_bytes(std::string_view hex) {
+    std::vector<std::uint8_t> out;
+    if ((hex.size() % 2U) != 0U) {
+        return out;
+    }
+
+    out.reserve(hex.size() / 2U);
+    for (std::size_t i = 0; i < hex.size(); i += 2U) {
+        auto parse_nibble = [](char c) -> int {
+            if (c >= '0' && c <= '9') return c - '0';
+            if (c >= 'a' && c <= 'f') return 10 + (c - 'a');
+            if (c >= 'A' && c <= 'F') return 10 + (c - 'A');
+            return -1;
+        };
+
+        const auto hi = parse_nibble(hex[i]);
+        const auto lo = parse_nibble(hex[i + 1U]);
+        if (hi < 0 || lo < 0) {
+            out.clear();
+            return out;
+        }
+
+        out.push_back(static_cast<std::uint8_t>((hi << 4) | lo));
+    }
+
+    return out;
+}
+
+void print_decoded_advertisement_pretty(const obs_proto::DecodeAdvertisementResponse& response) {
+    for (const auto& decoded : response.decoded_service_data()) {
+        std::cout << std::format("{}\n", decoded.service_label());
+        for (const auto& field : decoded.fields()) {
+            std::cout << std::format(
+                "  - {} ({}) = {}\n",
+                field.field(),
+                field.type(),
+                field.value());
+        }
+    }
+}
+
+void print_decoded_advertisement_json(const obs_proto::DecodeAdvertisementResponse& response) {
+    google::protobuf::util::JsonPrintOptions options;
+    options.always_print_fields_with_no_presence = true;
+    std::string json;
+    auto status = google::protobuf::util::MessageToJsonString(response, &json, options);
     if (status.ok()) {
         std::cout << json << '\n';
     }
@@ -212,6 +277,50 @@ int run_scan_list(const ScanOptions& opts) {
             print_observed_device_json(device);
             break;
         }
+    }
+
+    return 0;
+}
+
+int run_scan_decode(const ScanOptions& opts) {
+    auto channel = grpc::CreateChannel(
+        opts.server, grpc::InsecureChannelCredentials());
+    auto stub = obs_proto::ObservationService::NewStub(channel);
+
+    const auto raw_data = hex_to_bytes(opts.raw_data_hex);
+    const auto raw_scan_response = hex_to_bytes(opts.raw_scan_response_hex);
+
+    if ((!opts.raw_data_hex.empty() && raw_data.empty())
+        || (!opts.raw_scan_response_hex.empty() && raw_scan_response.empty())) {
+        std::cerr << "auracle: failed to parse hex payload\n";
+        return 2;
+    }
+
+    obs_proto::DecodeAdvertisementRequest request;
+    if (!raw_data.empty()) {
+        request.set_raw_data(raw_data.data(), raw_data.size());
+    }
+    if (!raw_scan_response.empty()) {
+        request.set_raw_scan_response(raw_scan_response.data(), raw_scan_response.size());
+    }
+
+    grpc::ClientContext context;
+    obs_proto::DecodeAdvertisementResponse response;
+    auto status = stub->DecodeAdvertisement(&context, request, &response);
+
+    if (!status.ok()) {
+        std::cerr << std::format("auracle: decode failed: {}\n", status.error_message());
+        return 3;
+    }
+
+    switch (opts.format) {
+    case OutputFormat::Pretty:
+        print_decoded_advertisement_pretty(response);
+        break;
+    case OutputFormat::Json:
+    case OutputFormat::Prototext:
+        print_decoded_advertisement_json(response);
+        break;
     }
 
     return 0;

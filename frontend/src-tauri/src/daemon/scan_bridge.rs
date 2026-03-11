@@ -187,6 +187,7 @@ impl DaemonScanBridge {
                 Some(adv.tx_power as i16)
             },
             services: adv.service_uuids.clone(),
+            service_labels: adv.service_labels.clone(),
             manufacturer_data,
             last_seen: Self::timestamp_to_rfc3339(timestamp_ms),
         }
@@ -217,6 +218,7 @@ impl DaemonScanBridge {
                 Some(adv.tx_power as i16)
             },
             service_uuids: adv.service_uuids.clone(),
+            service_labels: adv.service_labels.clone(),
             company_id: if adv.company_id == 0 {
                 None
             } else {
@@ -359,28 +361,26 @@ impl DaemonScanBridge {
                                 // Preserve name and services from previous advertisements
                                 if let Some(existing) = scan.devices.get(&stable_id) {
                                     device.id = existing.id.clone();
-                                }
-                                if device.name == "Unknown" {
-                                    if let Some(existing) = scan.devices.get(&stable_id) {
-                                        if existing.name != "Unknown" {
-                                            device.name = existing.name.clone();
+                                    if device.name == "Unknown" && existing.name != "Unknown" {
+                                        device.name = existing.name.clone();
+                                    }
+                                    for service in &existing.services {
+                                        if !device.services.iter().any(|current| current == service) {
+                                            device.services.push(service.clone());
                                         }
                                     }
-                                }
-                                if device.services.is_empty() {
-                                    if let Some(existing) = scan.devices.get(&stable_id) {
-                                        if !existing.services.is_empty() {
-                                            device.services = existing.services.clone();
-                                        }
+                                    for (uuid, label) in &existing.service_labels {
+                                        device
+                                            .service_labels
+                                            .entry(uuid.clone())
+                                            .or_insert_with(|| label.clone());
+                                    }
+                                    if device.manufacturer_data.is_empty() && !existing.manufacturer_data.is_empty() {
+                                        device.manufacturer_data = existing.manufacturer_data.clone();
                                     }
                                 }
-                                if device.manufacturer_data.is_empty() {
-                                    if let Some(existing) = scan.devices.get(&stable_id) {
-                                        if !existing.manufacturer_data.is_empty() {
-                                            device.manufacturer_data = existing.manufacturer_data.clone();
-                                        }
-                                    }
-                                }
+                                device.services.sort();
+                                device.services.dedup();
 
                                 scan.devices.insert(stable_id, device);
                                 dirty = true;
