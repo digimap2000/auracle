@@ -5,6 +5,8 @@ if(APPLE)
     enable_language(OBJCXX)
 endif()
 
+include(CTest)
+
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 include(AuracleCompiler)
@@ -13,6 +15,7 @@ include(AuracleDependencies)
 
 add_subdirectory(dts-bluetooth)
 add_subdirectory(assigned-numbers)
+add_subdirectory(compliance)
 add_subdirectory(inventory)
 add_subdirectory(observation)
 add_subdirectory(rpc)
