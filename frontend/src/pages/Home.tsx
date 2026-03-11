@@ -17,8 +17,6 @@ interface HomeProps {
   loading: boolean;
   error: string | null;
   refresh: () => void;
-  activeUnitId: string | null;
-  onSelectUnit: (id: string) => void;
 }
 
 function kindIcon(kind: string) {
@@ -58,32 +56,23 @@ function capabilityLabel(cap: string): string {
 
 interface UnitCardProps {
   unit: DaemonUnit;
-  active: boolean;
-  onSelect: () => void;
 }
 
-function UnitCard({ unit, active, onSelect }: UnitCardProps) {
+function UnitCard({ unit }: UnitCardProps) {
   const displayName = unit.product || kindLabel(unit.kind);
-  const selectable = unit.present;
 
   return (
-    <button
-      type="button"
-      disabled={!selectable}
-      onClick={onSelect}
+    <div
       className={cn(
         "w-full rounded-lg border p-4 text-left transition-colors",
-        selectable
-          ? "cursor-pointer hover:bg-secondary/50"
-          : "cursor-default opacity-50",
-        active ? "border-primary bg-primary/5" : "bg-card"
+        unit.present ? "bg-card hover:bg-secondary/30" : "bg-card opacity-50"
       )}
     >
       <div className="flex items-start gap-3">
         <div
           className={cn(
             "mt-0.5",
-            active ? "text-primary" : "text-muted-foreground"
+            unit.present ? "text-primary" : "text-muted-foreground"
           )}
         >
           {kindIcon(unit.kind)}
@@ -119,7 +108,7 @@ function UnitCard({ unit, active, onSelect }: UnitCardProps) {
           </div>
         </div>
       </div>
-    </button>
+    </div>
   );
 }
 
@@ -128,8 +117,6 @@ export function Home({
   loading,
   error,
   refresh,
-  activeUnitId,
-  onSelectUnit,
 }: HomeProps) {
   // Error state
   if (error) {
@@ -200,8 +187,6 @@ export function Home({
               <UnitCard
                 key={unit.id}
                 unit={unit}
-                active={unit.id === activeUnitId}
-                onSelect={() => onSelectUnit(unit.id)}
               />
             ))}
           </div>

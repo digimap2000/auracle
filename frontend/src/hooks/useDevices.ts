@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import {
   type BleDevice,
@@ -29,7 +29,7 @@ function canScan(unit: DaemonUnit): boolean {
   return unit.present && unit.capabilities.includes("ble-scan");
 }
 
-export function useDevices(activeUnitId: string | null, units: DaemonUnit[]) {
+export function useDevices(units: DaemonUnit[]) {
   const [state, setState] = useState<DevicesState>({
     allBleDevices: [],
     allBlePackets: [],
@@ -119,20 +119,6 @@ export function useDevices(activeUnitId: string | null, units: DaemonUnit[]) {
     );
   }, [units]);
 
-  const bleDevices = useMemo(() => {
-    if (!activeUnitId) {
-      return [];
-    }
-    return state.allBleDevices.filter((device) => device.unit_id === activeUnitId);
-  }, [activeUnitId, state.allBleDevices]);
-
-  const blePackets = useMemo(() => {
-    if (!activeUnitId) {
-      return [];
-    }
-    return state.allBlePackets.filter((packet) => packet.unit_id === activeUnitId);
-  }, [activeUnitId, state.allBlePackets]);
-
   const refreshSerialPorts = useCallback(async () => {
     try {
       const ports = await scanSerialPorts();
@@ -185,8 +171,6 @@ export function useDevices(activeUnitId: string | null, units: DaemonUnit[]) {
 
   return {
     ...state,
-    bleDevices,
-    blePackets,
     refreshSerialPorts,
     connect,
     disconnect,

@@ -4,7 +4,7 @@ import type { DaemonUnit } from "@/lib/tauri";
 import type { useUpdater } from "@/hooks/useUpdater";
 
 interface StatusBarProps {
-  activeUnit: DaemonUnit | null;
+  units: DaemonUnit[];
   connectedCount: number;
   updater: ReturnType<typeof useUpdater>;
 }
@@ -18,26 +18,30 @@ function kindIcon(kind: string) {
   }
 }
 
-export function StatusBar({ activeUnit, connectedCount, updater }: StatusBarProps) {
+export function StatusBar({ units, connectedCount, updater }: StatusBarProps) {
   const isConnected = connectedCount > 0;
   const { status, checkForUpdate, downloadAndInstall, restartApp } = updater;
+  const presentUnits = units.filter((unit) => unit.present);
+  const primaryUnit = presentUnits[0] ?? units[0] ?? null;
 
   return (
     <div className="flex h-8 shrink-0 items-center justify-between border-t bg-background px-3 text-xs text-muted-foreground">
       <div className="flex items-center gap-3">
-        {activeUnit ? (
+        {primaryUnit ? (
           <div className="flex items-center gap-1.5">
-            <span className="text-primary">{kindIcon(activeUnit.kind)}</span>
-            <span>{activeUnit.product || activeUnit.kind}</span>
+            <span className="text-primary">{kindIcon(primaryUnit.kind)}</span>
+            <span>
+              {presentUnits.length} observed unit{presentUnits.length !== 1 ? "s" : ""}
+            </span>
             <div
               className={cn(
                 "size-1.5 rounded-full",
-                activeUnit.present ? "bg-success" : "bg-muted-foreground/30"
+                presentUnits.length > 0 ? "bg-success" : "bg-muted-foreground/30"
               )}
             />
           </div>
         ) : (
-          <span className="text-muted-foreground/50">No unit selected</span>
+          <span className="text-muted-foreground/50">No units detected</span>
         )}
         <div className="flex items-center gap-1.5">
           <div

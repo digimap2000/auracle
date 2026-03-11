@@ -4,6 +4,13 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DeviceCard } from "@/components/devices/DeviceCard";
 import {
@@ -23,25 +30,29 @@ const TIMELINE_WINDOW_MS = 60_000;
 const TIMELINE_BUCKETS = 24;
 
 interface DevicesProps {
+  units: DaemonUnit[];
   bleDevices: BleDevice[];
   blePackets: BlePacket[];
   scanning: boolean;
-  activeUnit: DaemonUnit | null;
+}
+
+function canScan(unit: DaemonUnit) {
+  return unit.present && unit.capabilities.includes("ble-scan");
 }
 
 function EmptyState({
   scanning,
-  activeUnit,
+  selectedUnit,
 }: {
   scanning: boolean;
-  activeUnit: DaemonUnit | null;
+  selectedUnit: DaemonUnit | null;
 }) {
-  if (!activeUnit) {
+  if (!selectedUnit) {
     return (
       <div className="flex h-full items-center justify-center">
         <div className="text-center text-muted-foreground">
           <Bluetooth className="mx-auto mb-3 size-6 opacity-30" />
-          <p className="text-sm">Select an active unit on the Home page</p>
+          <p className="text-sm">No scannable units are currently available</p>
         </div>
       </div>
     );
@@ -53,15 +64,15 @@ function EmptyState({
         <Bluetooth className="mx-auto mb-3 size-6 animate-pulse opacity-50" />
         <p className="text-sm">
           {scanning
-            ? `Scanning from ${activeUnit.product || activeUnit.kind}...`
-            : `Waiting for scan results from ${activeUnit.product || activeUnit.kind}...`}
+            ? `Scanning from ${selectedUnit.product || selectedUnit.kind}...`
+            : `Waiting for scan results from ${selectedUnit.product || selectedUnit.kind}...`}
         </p>
       </div>
     </div>
   );
 }
 
-export function Devices({ bleDevices, blePackets, scanning, activeUnit }: DevicesProps) {
+export function Devices({ units, bleDevices, blePackets, scanning }: DevicesProps) {
   const [, setTick] = useState(0);
   useEffect(() => {
     const id = setInterval(() => setTick((t) => t + 1), 1000);
@@ -70,11 +81,49 @@ export function Devices({ bleDevices, blePackets, scanning, activeUnit }: Device
 
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [selectedPacketId, setSelectedPacketId] = useState<string | null>(null);
+  const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
   const rssiWindows = useRef<Map<string, number[]>>(new Map());
 
+  const scannableUnits = useMemo(
+    () => units.filter(canScan),
+    [units]
+  );
+
+  const selectedUnit = useMemo(
+    () => scannableUnits.find((unit) => unit.id === selectedUnitId) ?? null,
+    [scannableUnits, selectedUnitId]
+  );
+
+  useEffect(() => {
+    if (scannableUnits.length === 0) {
+      if (selectedUnitId !== null) {
+        setSelectedUnitId(null);
+      }
+      return;
+    }
+
+    if (!selectedUnitId || !scannableUnits.some((unit) => unit.id === selectedUnitId)) {
+      setSelectedUnitId(scannableUnits[0]?.id ?? null);
+    }
+  }, [scannableUnits, selectedUnitId]);
+
+  const unitBleDevices = useMemo(() => {
+    if (!selectedUnitId) {
+      return [];
+    }
+    return bleDevices.filter((device) => device.unit_id === selectedUnitId);
+  }, [bleDevices, selectedUnitId]);
+
+  const unitBlePackets = useMemo(() => {
+    if (!selectedUnitId) {
+      return [];
+    }
+    return blePackets.filter((packet) => packet.unit_id === selectedUnitId);
+  }, [blePackets, selectedUnitId]);
+
   const recentPackets = useMemo(
-    () => blePackets.slice(-MAX_PACKETS_IN_VIEW).reverse(),
-    [blePackets]
+    () => unitBlePackets.slice(-MAX_PACKETS_IN_VIEW).reverse(),
+    [unitBlePackets]
   );
 
   const observedFieldsByStableId = useMemo(() => {
@@ -136,7 +185,7 @@ export function Devices({ bleDevices, blePackets, scanning, activeUnit }: Device
       }
     };
 
-    for (const packet of blePackets) {
+    for (const packet of unitBlePackets) {
       ingestFields(packet.stable_id, "adv", packet.raw_data, packet.timestamp_ms);
       ingestFields(packet.stable_id, "scan-response", packet.raw_scan_response, packet.timestamp_ms);
     }
@@ -157,7 +206,7 @@ export function Devices({ bleDevices, blePackets, scanning, activeUnit }: Device
           })),
       ])
     );
-  }, [blePackets]);
+  }, [unitBlePackets]);
 
   useEffect(() => {
     if (recentPackets.length === 0) {
@@ -177,38 +226,38 @@ export function Devices({ bleDevices, blePackets, scanning, activeUnit }: Device
 
   const packetCounts = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const packet of blePackets) {
+    for (const packet of unitBlePackets) {
       counts.set(packet.stable_id, (counts.get(packet.stable_id) ?? 0) + 1);
     }
     return counts;
-  }, [blePackets]);
+  }, [unitBlePackets]);
 
   const strongestRssi = useMemo(() => {
     const strongest = new Map<string, number>();
-    for (const packet of blePackets) {
+    for (const packet of unitBlePackets) {
       const existing = strongest.get(packet.stable_id);
       if (existing == null || packet.rssi > existing) {
         strongest.set(packet.stable_id, packet.rssi);
       }
     }
     return strongest;
-  }, [blePackets]);
+  }, [unitBlePackets]);
 
   const firstSeenAt = useMemo(() => {
     const firstSeen = new Map<string, number>();
-    for (const packet of blePackets) {
+    for (const packet of unitBlePackets) {
       const existing = firstSeen.get(packet.stable_id);
       if (existing == null || packet.timestamp_ms < existing) {
         firstSeen.set(packet.stable_id, packet.timestamp_ms);
       }
     }
     return firstSeen;
-  }, [blePackets]);
+  }, [unitBlePackets]);
 
   const sortedDevices = useMemo(() => {
     const windows = rssiWindows.current;
 
-    const smoothed = bleDevices.map((device) => {
+    const smoothed = unitBleDevices.map((device) => {
       let samples = windows.get(device.stable_id);
       if (!samples) {
         samples = [];
@@ -232,7 +281,7 @@ export function Devices({ bleDevices, blePackets, scanning, activeUnit }: Device
       };
     });
 
-    const activeIds = new Set(bleDevices.map((device) => device.stable_id));
+    const activeIds = new Set(unitBleDevices.map((device) => device.stable_id));
     for (const id of windows.keys()) {
       if (!activeIds.has(id)) {
         windows.delete(id);
@@ -255,12 +304,12 @@ export function Devices({ bleDevices, blePackets, scanning, activeUnit }: Device
 
       return a.id.localeCompare(b.id);
     });
-  }, [bleDevices, firstSeenAt, packetCounts, strongestRssi]);
+  }, [firstSeenAt, packetCounts, strongestRssi, unitBleDevices]);
 
   const serviceSummary = useMemo(() => {
     const counts = new Map<string, number>();
 
-    for (const device of bleDevices) {
+    for (const device of unitBleDevices) {
       const uniqueServices = new Set(device.services.map((service) => service.toLowerCase()));
       for (const service of uniqueServices) {
         counts.set(service, (counts.get(service) ?? 0) + 1);
@@ -275,12 +324,12 @@ export function Devices({ bleDevices, blePackets, scanning, activeUnit }: Device
         isStandard: isStandardUuid(uuid),
       }))
       .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
-  }, [bleDevices]);
+  }, [unitBleDevices]);
 
   const companySummary = useMemo(() => {
     const counts = new Map<number, number>();
 
-    for (const packet of blePackets) {
+    for (const packet of unitBlePackets) {
       if (packet.company_id != null) {
         counts.set(packet.company_id, (counts.get(packet.company_id) ?? 0) + 1);
       }
@@ -293,15 +342,15 @@ export function Devices({ bleDevices, blePackets, scanning, activeUnit }: Device
         count,
       }))
       .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
-  }, [blePackets]);
+  }, [unitBlePackets]);
 
   const uniqueServicesCount = serviceSummary.length;
-  const namedDevicesCount = bleDevices.filter((device) => device.name !== "Unknown").length;
+  const namedDevicesCount = unitBleDevices.filter((device) => device.name !== "Unknown").length;
   const packetRate = useMemo(() => {
     const now = Date.now();
-    const recent = blePackets.filter((packet) => now - packet.timestamp_ms <= 10_000);
+    const recent = unitBlePackets.filter((packet) => now - packet.timestamp_ms <= 10_000);
     return recent.length / 10;
-  }, [blePackets]);
+  }, [unitBlePackets]);
 
   const timelineBuckets = useMemo(() => {
     const now = Date.now();
@@ -312,7 +361,7 @@ export function Devices({ bleDevices, blePackets, scanning, activeUnit }: Device
       namedCount: 0,
     }));
 
-    for (const packet of blePackets) {
+    for (const packet of unitBlePackets) {
       const age = now - packet.timestamp_ms;
       if (age < 0 || age > TIMELINE_WINDOW_MS) {
         continue;
@@ -329,12 +378,12 @@ export function Devices({ bleDevices, blePackets, scanning, activeUnit }: Device
     }
 
     return buckets;
-  }, [blePackets]);
+  }, [unitBlePackets]);
 
   const maxBucketCount = Math.max(...timelineBuckets.map((bucket) => bucket.count), 1);
 
-  if (!activeUnit || (bleDevices.length === 0 && blePackets.length === 0)) {
-    return <EmptyState scanning={scanning} activeUnit={activeUnit} />;
+  if (!selectedUnit) {
+    return <EmptyState scanning={scanning} selectedUnit={selectedUnit} />;
   }
 
   return (
@@ -346,12 +395,24 @@ export function Devices({ bleDevices, blePackets, scanning, activeUnit }: Device
               Scan Diagnostics
             </CardTitle>
             <CardDescription>
-              {activeUnit.product || activeUnit.kind} on {activeUnit.id}
+              {selectedUnit.product || selectedUnit.kind} on {selectedUnit.id}
             </CardDescription>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="outline">{bleDevices.length} devices</Badge>
-            <Badge variant="outline">{blePackets.length} packets</Badge>
+            <Select value={selectedUnitId ?? undefined} onValueChange={setSelectedUnitId}>
+              <SelectTrigger className="h-8 min-w-64 bg-background" size="sm">
+                <SelectValue placeholder="Select unit" />
+              </SelectTrigger>
+              <SelectContent>
+                {scannableUnits.map((unit) => (
+                  <SelectItem key={unit.id} value={unit.id}>
+                    {unit.product || unit.kind} · {unit.id}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Badge variant="outline">{unitBleDevices.length} devices</Badge>
+            <Badge variant="outline">{unitBlePackets.length} packets</Badge>
             <Badge variant="outline">{uniqueServicesCount} services</Badge>
             <Badge variant={scanning ? "default" : "secondary"}>
               {scanning ? `${packetRate.toFixed(1)} pkt/s` : "Idle"}
@@ -373,7 +434,7 @@ export function Devices({ bleDevices, blePackets, scanning, activeUnit }: Device
               <CardHeader>
                 <CardTitle>Detected Devices</CardTitle>
                 <CardDescription>
-                  Current deduplicated view for the active scanning unit.
+                  Current deduplicated view for the selected scanning unit.
                 </CardDescription>
               </CardHeader>
               <CardContent className="min-h-0">
@@ -414,9 +475,9 @@ export function Devices({ bleDevices, blePackets, scanning, activeUnit }: Device
                 </CardHeader>
                 <CardContent className="grid grid-cols-2 gap-3 text-sm">
                   <MetricCard label="Named Devices" value={namedDevicesCount} />
-                  <MetricCard label="Unnamed Devices" value={bleDevices.length - namedDevicesCount} />
+                  <MetricCard label="Unnamed Devices" value={unitBleDevices.length - namedDevicesCount} />
                   <MetricCard label="Unique Services" value={uniqueServicesCount} />
-                  <MetricCard label="Recent Packets" value={blePackets.filter((packet) => Date.now() - packet.timestamp_ms <= 30_000).length} />
+                  <MetricCard label="Recent Packets" value={unitBlePackets.filter((packet) => Date.now() - packet.timestamp_ms <= 30_000).length} />
                 </CardContent>
               </Card>
 
@@ -583,7 +644,7 @@ export function Devices({ bleDevices, blePackets, scanning, activeUnit }: Device
               <CardHeader>
                 <CardTitle>Packet Stream</CardTitle>
                 <CardDescription>
-                  Live packet log for the active unit. Select a row to inspect the payload.
+                  Live packet log for the selected unit. Select a row to inspect the payload.
                 </CardDescription>
               </CardHeader>
               <CardContent className="min-h-0">

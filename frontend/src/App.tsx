@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Routes, Route } from "react-router-dom";
 import { ActivityRail } from "@/components/layout/ActivityRail";
 import { StatusBar } from "@/components/layout/StatusBar";
@@ -15,53 +15,25 @@ import { useUpdater } from "@/hooks/useUpdater";
 import { useZoom } from "@/hooks/use-zoom";
 
 export default function App() {
-  const [activeUnitId, setActiveUnitId] = useState<string | null>(null);
   const { units, loading: unitsLoading, error: unitsError, refresh: refreshUnits } = useUnits();
-  const { connectedDevices, bleDevices, blePackets, scanning } = useDevices(activeUnitId, units);
+  const { connectedDevices, allBleDevices, allBlePackets, scanning } = useDevices(units);
   const updater = useUpdater();
   const { zoom } = useZoom();
 
-  // Derive the full active unit object
-  const activeUnit = useMemo(
-    () => units.find((u) => u.id === activeUnitId) ?? null,
-    [units, activeUnitId]
-  );
-
-  // Maintain a valid active unit selection, preferring the first scannable unit.
-  useEffect(() => {
-    const scannableUnits = units.filter(
-      (unit) => unit.present && unit.capabilities.includes("ble-scan")
-    );
-
-    if (scannableUnits.length === 0) {
-      if (activeUnitId !== null) {
-        setActiveUnitId(null);
-      }
-      return;
-    }
-
-    if (!activeUnitId || !scannableUnits.some((unit) => unit.id === activeUnitId)) {
-      const nextActiveUnit = scannableUnits[0];
-      if (nextActiveUnit) {
-        setActiveUnitId(nextActiveUnit.id);
-      }
-    }
-  }, [units, activeUnitId]);
-
-  const handleSelectUnit = useCallback((id: string) => {
-    setActiveUnitId(id);
-  }, []);
-
-  const activeCapabilities = useMemo(
-    () => activeUnit?.capabilities ?? [],
-    [activeUnit]
+  const availableCapabilities = useMemo(
+    () => [...new Set(
+      units
+        .filter((unit) => unit.present)
+        .flatMap((unit) => unit.capabilities)
+    )].sort(),
+    [units]
   );
 
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-background">
       <ZoomIndicator zoom={zoom} />
       <div className="flex min-h-0 flex-1">
-        <ActivityRail activeCapabilities={activeCapabilities} />
+        <ActivityRail activeCapabilities={availableCapabilities} />
         <main className="flex flex-1 flex-col overflow-hidden rounded-tl-xl bg-background">
           <Routes>
             <Route
@@ -72,8 +44,6 @@ export default function App() {
                   loading={unitsLoading}
                   error={unitsError}
                   refresh={refreshUnits}
-                  activeUnitId={activeUnitId}
-                  onSelectUnit={handleSelectUnit}
                 />
               }
             />
@@ -81,10 +51,10 @@ export default function App() {
               path="/scan"
               element={
                 <Devices
-                  bleDevices={bleDevices}
-                  blePackets={blePackets}
+                  units={units}
+                  bleDevices={allBleDevices}
+                  blePackets={allBlePackets}
                   scanning={scanning}
-                  activeUnit={activeUnit}
                 />
               }
             />
@@ -92,9 +62,9 @@ export default function App() {
               path="/sink"
               element={
                 <Sink
-                  bleDevices={bleDevices}
+                  units={units}
+                  bleDevices={allBleDevices}
                   scanning={scanning}
-                  activeUnit={activeUnit}
                 />
               }
             />
@@ -105,7 +75,7 @@ export default function App() {
         </main>
       </div>
       <StatusBar
-        activeUnit={activeUnit}
+        units={units}
         connectedCount={connectedDevices.length}
         updater={updater}
       />
