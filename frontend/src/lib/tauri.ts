@@ -105,10 +105,11 @@ export interface ComplianceFinding {
 }
 
 export interface ComplianceRunResult {
-  unit_id: string;
+  scanner_unit_id: string;
   target_id: string;
+  observed_device_id: string;
+  observed_device_name: string;
   rule_count: number;
-  evaluated_device_count: number;
   findings: ComplianceFinding[];
 }
 
@@ -200,21 +201,25 @@ export async function listComplianceSuites(): Promise<ComplianceSuiteInfo[]> {
 }
 
 export async function runComplianceRule(
-  unitId: string,
+  scannerUnitId: string,
+  observedDeviceId: string,
   ruleId: string
 ): Promise<ComplianceRunResult> {
   return invoke<ComplianceRunResult>("run_compliance_rule", {
-    unitId,
+    scannerUnitId,
+    observedDeviceId,
     ruleId,
   });
 }
 
 export async function runComplianceSuite(
-  unitId: string,
+  scannerUnitId: string,
+  observedDeviceId: string,
   suiteId: string
 ): Promise<ComplianceRunResult> {
   return invoke<ComplianceRunResult>("run_compliance_suite", {
-    unitId,
+    scannerUnitId,
+    observedDeviceId,
     suiteId,
   });
 }

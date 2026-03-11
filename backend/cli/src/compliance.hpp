@@ -8,7 +8,8 @@ namespace auracle::cli {
 
 struct ComplianceOptions {
     std::string server = "127.0.0.1:50051";
-    std::string unit_id;
+    std::string scanner_unit_id;
+    std::string observed_device_id;
     std::string rule_id;
     std::string suite_id;
     std::string rule_path;

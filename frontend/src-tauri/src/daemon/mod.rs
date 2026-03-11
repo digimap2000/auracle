@@ -69,10 +69,11 @@ pub struct ComplianceFinding {
 
 #[derive(Debug, Serialize, Clone)]
 pub struct ComplianceRunResult {
-    pub unit_id: String,
+    pub scanner_unit_id: String,
     pub target_id: String,
+    pub observed_device_id: String,
+    pub observed_device_name: String,
     pub rule_count: u32,
-    pub evaluated_device_count: u32,
     pub findings: Vec<ComplianceFinding>,
 }
 

@@ -12,6 +12,7 @@ enum class TokenKind {
     identifier,
     string_literal,
     uuid_literal,
+    dot,
     left_paren,
     right_paren,
     kw_test,
@@ -27,8 +28,10 @@ enum class TokenKind {
     kw_or,
     kw_not,
     kw_ea,
-    kw_has_service_data,
-    kw_lacks_service_data,
+    kw_has,
+    kw_lacks,
+    kw_equals,
+    kw_not_equals,
 };
 
 struct SourceLocation {

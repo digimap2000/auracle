@@ -1,0 +1,7 @@
+TEST AURACAST_SRC_002
+TITLE "Appearance should identify an Auracast Source as Generic Audio Source"
+WHEN EA HAS service_data.broadcast_audio_announcement
+ AND EA.ad.appearance NOT_EQUALS 0x0041
+THEN FAIL
+MESSAGE "Source appearance is not set to Generic Audio Source (0x0041) for a Naim audio streamer"
+REFERENCE "Bluetooth Assigned Numbers Section 6.1"

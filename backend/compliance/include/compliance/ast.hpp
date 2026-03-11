@@ -18,15 +18,28 @@ enum class Scope {
     ea,
 };
 
-enum class PredicateKind {
-    has_service_data,
-    lacks_service_data,
+enum class FactPathKind {
+    service_data,
+    ad_appearance,
+};
+
+struct FactPath {
+    FactPathKind kind;
+    std::optional<std::uint16_t> key;
+};
+
+enum class PredicateOp {
+    has,
+    lacks,
+    equals,
+    not_equals,
 };
 
 struct Predicate {
     Scope scope;
-    PredicateKind kind;
-    std::uint16_t uuid;
+    FactPath path;
+    PredicateOp op;
+    std::optional<std::uint16_t> value;
 };
 
 struct Expression;

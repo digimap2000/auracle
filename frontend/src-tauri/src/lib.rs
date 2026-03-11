@@ -206,10 +206,11 @@ fn map_compliance_run_result(
     result: daemon::proto::compliance::ComplianceRunResult,
 ) -> ComplianceRunResult {
     ComplianceRunResult {
-        unit_id: result.unit_id,
+        scanner_unit_id: result.scanner_unit_id,
         target_id: result.target_id,
+        observed_device_id: result.observed_device_id,
+        observed_device_name: result.observed_device_name,
         rule_count: result.rule_count,
-        evaluated_device_count: result.evaluated_device_count,
         findings: result
             .findings
             .into_iter()
@@ -232,13 +233,15 @@ fn map_compliance_run_result(
 
 #[tauri::command]
 async fn run_compliance_rule(
-    unit_id: String,
+    scanner_unit_id: String,
+    observed_device_id: String,
     rule_id: String,
 ) -> Result<ComplianceRunResult, AuracleError> {
     let mut client = daemon::compliance_client();
     let response = client
         .run_compliance_rule(daemon::proto::compliance::RunComplianceRuleRequest {
-            unit_id,
+            scanner_unit_id,
+            observed_device_id,
             rule_id,
         })
         .await
@@ -253,13 +256,15 @@ async fn run_compliance_rule(
 
 #[tauri::command]
 async fn run_compliance_suite(
-    unit_id: String,
+    scanner_unit_id: String,
+    observed_device_id: String,
     suite_id: String,
 ) -> Result<ComplianceRunResult, AuracleError> {
     let mut client = daemon::compliance_client();
     let response = client
         .run_compliance_suite(daemon::proto::compliance::RunComplianceSuiteRequest {
-            unit_id,
+            scanner_unit_id,
+            observed_device_id,
             suite_id,
         })
         .await

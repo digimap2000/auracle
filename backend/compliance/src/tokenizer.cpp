@@ -11,11 +11,11 @@ namespace auracle::compliance {
 namespace {
 
 [[nodiscard]] bool is_identifier_char(char ch) noexcept {
-    return (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_';
+    return std::isalnum(static_cast<unsigned char>(ch)) != 0 || ch == '_';
 }
 
 [[nodiscard]] bool is_identifier_start(char ch) noexcept {
-    return (ch >= 'A' && ch <= 'Z') || ch == '_';
+    return std::isalpha(static_cast<unsigned char>(ch)) != 0 || ch == '_';
 }
 
 [[nodiscard]] TokenKind keyword_kind(std::string_view text) {
@@ -33,8 +33,10 @@ namespace {
         std::pair{"OR", TokenKind::kw_or},
         std::pair{"NOT", TokenKind::kw_not},
         std::pair{"EA", TokenKind::kw_ea},
-        std::pair{"HAS_SERVICE_DATA", TokenKind::kw_has_service_data},
-        std::pair{"LACKS_SERVICE_DATA", TokenKind::kw_lacks_service_data},
+        std::pair{"HAS", TokenKind::kw_has},
+        std::pair{"LACKS", TokenKind::kw_lacks},
+        std::pair{"EQUALS", TokenKind::kw_equals},
+        std::pair{"NOT_EQUALS", TokenKind::kw_not_equals},
     };
 
     for (const auto& [keyword, kind] : keywords) {
@@ -72,6 +74,14 @@ Token Tokenizer::next() {
     }
 
     const char ch = peek();
+    if (ch == '.') {
+        advance();
+        return Token{
+            .kind = TokenKind::dot,
+            .location = location,
+            .text = ".",
+        };
+    }
     if (ch == '(') {
         advance();
         return Token{

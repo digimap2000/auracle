@@ -69,7 +69,7 @@ export default function App() {
               }
             />
             <Route path="/generate" element={<Generators />} />
-            <Route path="/compliance" element={<Compliance units={units} />} />
+            <Route path="/compliance" element={<Compliance units={units} bleDevices={allBleDevices} />} />
             <Route path="/theme" element={<ThemeReference />} />
           </Routes>
         </main>

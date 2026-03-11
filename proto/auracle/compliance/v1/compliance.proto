@@ -35,11 +35,12 @@ message ComplianceFinding {
 }
 
 message ComplianceRunResult {
-    string unit_id = 1;
+    string scanner_unit_id = 1;
     string target_id = 2;
-    uint32 rule_count = 3;
-    uint32 evaluated_device_count = 4;
-    repeated ComplianceFinding findings = 5;
+    string observed_device_id = 3;
+    string observed_device_name = 4;
+    uint32 rule_count = 5;
+    repeated ComplianceFinding findings = 6;
 }
 
 message ListComplianceRulesRequest {}
@@ -55,8 +56,9 @@ message ListComplianceSuitesResponse {
 }
 
 message RunComplianceRuleRequest {
-    string unit_id = 1;
-    string rule_id = 2;
+    string scanner_unit_id = 1;
+    string observed_device_id = 2;
+    string rule_id = 3;
 }
 
 message RunComplianceRuleResponse {
@@ -64,8 +66,9 @@ message RunComplianceRuleResponse {
 }
 
 message RunComplianceSuiteRequest {
-    string unit_id = 1;
-    string suite_id = 2;
+    string scanner_unit_id = 1;
+    string observed_device_id = 2;
+    string suite_id = 3;
 }
 
 message RunComplianceSuiteResponse {

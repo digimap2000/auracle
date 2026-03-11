@@ -38,7 +38,7 @@ Layout structure:
 | `/` | `Home` | `bleDevices: BleDevice[]`, `scanning: boolean`, `onStartScan: () => void`, `onStopScan: () => void` |
 | `/browse` | `Devices` | none |
 | `/generate` | `StreamConfig` | none |
-| `/compliance` | `Compliance` | none |
+| `/compliance` | `Compliance` | `units: DaemonUnit[]`, `bleDevices: BleDevice[]` |
 
 All routes are defined in `src/App.tsx` using `<Routes>` and `<Route>`.
 
@@ -77,9 +77,21 @@ Audio stream configuration form inside a Card (max-w-lg):
 
 ### Compliance (`src/pages/Compliance.tsx`)
 
-Stub page at `/compliance`. Shows Header "Compliance" with description "LE Audio certification test runner" and centred empty state: ClipboardCheck icon + "Compliance test runner coming soon".
+Daemon-backed compliance runner for one observed DUT at a time.
 
-**Status**: Stub — no functionality.
+Layout:
+- **Scanner Unit** card — choose one present unit with BLE scan capability
+- **Detected Device** card — choose one observed DUT retained by that scanner
+- **Run Suite** card — execute one authored suite against the selected DUT
+- **Run Individual Test** card — execute one authored rule against the selected DUT
+- **Last Result** card — verdict counts and findings for the last run
+
+Semantics:
+- The selected unit is the scanner/sniffer hardware
+- The selected detected device is the DUT
+- Compliance runs target exactly one observed DUT, never the whole retained set
+
+**Status**: Complete — daemon-backed via gRPC and Tauri bridge.
 
 ### Logs (`src/pages/Logs.tsx`)
 

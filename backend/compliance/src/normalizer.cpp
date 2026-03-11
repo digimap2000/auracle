@@ -24,6 +24,9 @@ void collect_service_data_uuids(
                 const std::uint16_t uuid = static_cast<std::uint16_t>(
                     bytes[offset + 2U] | (bytes[offset + 3U] << 8U));
                 ea_facts.service_data_uuids.insert(uuid);
+            } else if (ad_type == 0x19) {
+                ea_facts.appearance = static_cast<std::uint16_t>(
+                    bytes[offset + 2U] | (bytes[offset + 3U] << 8U));
             }
         }
 

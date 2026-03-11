@@ -3,7 +3,9 @@
 #include <compliance/engine.hpp>
 #include <compliance/normalizer.hpp>
 
+#include <array>
 #include <span>
+#include <vector>
 
 namespace auracle::rpc {
 namespace {
@@ -43,45 +45,62 @@ void to_proto(
 
 template<typename RuleRange>
 void populate_run_result(
-    const std::string& unit_id,
+    const std::string& scanner_unit_id,
+    const observation::ObservedBleDevice& observed_device,
     std::string target_id,
     const RuleRange& rules,
-    observation::ScannerManager& scanner_manager,
     compliance_proto::ComplianceRunResult* out) {
-    out->set_unit_id(unit_id);
+    out->set_scanner_unit_id(scanner_unit_id);
     out->set_target_id(std::move(target_id));
-
-    const auto observed_devices = scanner_manager.list_observed_devices(unit_id);
-    out->set_evaluated_device_count(static_cast<std::uint32_t>(observed_devices.size()));
+    out->set_observed_device_id(observed_device.advertisement.device_id);
+    out->set_observed_device_name(observed_device.advertisement.name);
     out->set_rule_count(static_cast<std::uint32_t>(std::size(rules)));
 
-    for (const auto& observed_device : observed_devices) {
-        for (const auto& rule_ref : rules) {
-            const compliance::Rule& rule = rule_ref.get().rule;
-            if (auto finding = compliance::evaluate_rule(
-                    rule,
-                    compliance::normalize_ea_facts(observed_device.advertisement));
-                finding.has_value()) {
-                auto* out_finding = out->add_findings();
-                out_finding->set_rule_id(finding->test_id);
-                out_finding->set_verdict(to_proto_verdict(finding->verdict));
-                out_finding->set_message(finding->message);
-                out_finding->set_reference(finding->reference.value_or(""));
-                out_finding->set_observed_device_id(observed_device.advertisement.device_id);
-                out_finding->set_observed_device_name(observed_device.advertisement.name);
-            }
+    for (const auto& rule_ref : rules) {
+        const compliance::Rule& rule = rule_ref.get().rule;
+        if (auto finding = compliance::evaluate_rule(
+                rule,
+                compliance::normalize_ea_facts(observed_device.advertisement));
+            finding.has_value()) {
+            auto* out_finding = out->add_findings();
+            out_finding->set_rule_id(finding->test_id);
+            out_finding->set_verdict(to_proto_verdict(finding->verdict));
+            out_finding->set_message(finding->message);
+            out_finding->set_reference(finding->reference.value_or(""));
+            out_finding->set_observed_device_id(observed_device.advertisement.device_id);
+            out_finding->set_observed_device_name(observed_device.advertisement.name);
         }
     }
 }
 
-grpc::Status validate_run_request(std::string_view unit_id, std::string_view target) {
-    if (unit_id.empty()) {
-        return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, "unit_id is required");
+grpc::Status validate_run_request(
+    std::string_view scanner_unit_id,
+    std::string_view observed_device_id,
+    std::string_view target) {
+    if (scanner_unit_id.empty()) {
+        return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, "scanner_unit_id is required");
+    }
+    if (observed_device_id.empty()) {
+        return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, "observed_device_id is required");
     }
     if (target.empty()) {
         return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, "target id is required");
     }
     return grpc::Status::OK;
+}
+
+const observation::ObservedBleDevice* find_observed_device(
+    observation::ScannerManager& scanner_manager,
+    std::string_view scanner_unit_id,
+    std::string_view observed_device_id,
+    std::vector<observation::ObservedBleDevice>& scratch) {
+    scratch = scanner_manager.list_observed_devices(std::string(scanner_unit_id));
+    for (const auto& observed_device : scratch) {
+        if (observed_device.advertisement.device_id == observed_device_id) {
+            return &observed_device;
+        }
+    }
+    return nullptr;
 }
 
 } // namespace
@@ -116,21 +135,37 @@ grpc::Status ComplianceServiceImpl::RunComplianceRule(
     grpc::ServerContext* /*context*/,
     const compliance_proto::RunComplianceRuleRequest* request,
     compliance_proto::RunComplianceRuleResponse* response) {
-    if (grpc::Status status = validate_run_request(request->unit_id(), request->rule_id()); !status.ok()) {
+    if (grpc::Status status = validate_run_request(
+            request->scanner_unit_id(),
+            request->observed_device_id(),
+            request->rule_id());
+        !status.ok()) {
         return status;
     }
 
     const compliance::LoadedRule* loaded_rule = repository_.find_rule(request->rule_id());
     if (loaded_rule == nullptr) {
-        return grpc::Status(grpc::StatusCode::NOT_FOUND, "unknown compliance rule");
+        return grpc::Status(
+            grpc::StatusCode::NOT_FOUND,
+            "unknown compliance rule: " + request->rule_id());
+    }
+
+    std::vector<observation::ObservedBleDevice> observed_devices;
+    const auto* observed_device = find_observed_device(
+        scanner_manager_,
+        request->scanner_unit_id(),
+        request->observed_device_id(),
+        observed_devices);
+    if (observed_device == nullptr) {
+        return grpc::Status(grpc::StatusCode::NOT_FOUND, "unknown observed device for scanner unit");
     }
 
     const std::array rules{std::cref(*loaded_rule)};
     populate_run_result(
-        request->unit_id(),
+        request->scanner_unit_id(),
+        *observed_device,
         request->rule_id(),
         rules,
-        scanner_manager_,
         response->mutable_result());
 
     return grpc::Status::OK;
@@ -140,20 +175,36 @@ grpc::Status ComplianceServiceImpl::RunComplianceSuite(
     grpc::ServerContext* /*context*/,
     const compliance_proto::RunComplianceSuiteRequest* request,
     compliance_proto::RunComplianceSuiteResponse* response) {
-    if (grpc::Status status = validate_run_request(request->unit_id(), request->suite_id()); !status.ok()) {
+    if (grpc::Status status = validate_run_request(
+            request->scanner_unit_id(),
+            request->observed_device_id(),
+            request->suite_id());
+        !status.ok()) {
         return status;
     }
 
     if (repository_.find_suite(request->suite_id()) == nullptr) {
-        return grpc::Status(grpc::StatusCode::NOT_FOUND, "unknown compliance suite");
+        return grpc::Status(
+            grpc::StatusCode::NOT_FOUND,
+            "unknown compliance suite: " + request->suite_id());
+    }
+
+    std::vector<observation::ObservedBleDevice> observed_devices;
+    const auto* observed_device = find_observed_device(
+        scanner_manager_,
+        request->scanner_unit_id(),
+        request->observed_device_id(),
+        observed_devices);
+    if (observed_device == nullptr) {
+        return grpc::Status(grpc::StatusCode::NOT_FOUND, "unknown observed device for scanner unit");
     }
 
     const auto rules = repository_.rules_for_suite(request->suite_id());
     populate_run_result(
-        request->unit_id(),
+        request->scanner_unit_id(),
+        *observed_device,
         request->suite_id(),
         rules,
-        scanner_manager_,
         response->mutable_result());
 
     return grpc::Status::OK;

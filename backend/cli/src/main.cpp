@@ -70,10 +70,10 @@ void print_usage() {
         << "                   raw scan response payload bytes (ignored for EA-only rules)\n"
         << "\n"
         << "compliance run-rule usage:\n"
-        << "  auracle compliance run-rule <unit-id> <rule-id> [--server <addr>] [--format <fmt>]\n"
+        << "  auracle compliance run-rule <scanner-unit-id> <observed-device-id> <rule-id> [--server <addr>] [--format <fmt>]\n"
         << "\n"
         << "compliance run-suite usage:\n"
-        << "  auracle compliance run-suite <unit-id> <suite-id> [--server <addr>] [--format <fmt>]\n";
+        << "  auracle compliance run-suite <scanner-unit-id> <observed-device-id> <suite-id> [--server <addr>] [--format <fmt>]\n";
 }
 
 int run_list_main(int argc, char* argv[]) {
@@ -320,16 +320,17 @@ int run_compliance_list_suites_main(int argc, char* argv[]) {
 }
 
 int run_compliance_run_rule_main(int argc, char* argv[]) {
-    if (argc < 5) {
-        std::cerr << "usage: auracle compliance run-rule <unit-id> <rule-id> [options]\n";
+    if (argc < 6) {
+        std::cerr << "usage: auracle compliance run-rule <scanner-unit-id> <observed-device-id> <rule-id> [options]\n";
         return 2;
     }
 
     auracle::cli::ComplianceOptions opts;
-    opts.unit_id = argv[3];
-    opts.rule_id = argv[4];
+    opts.scanner_unit_id = argv[3];
+    opts.observed_device_id = argv[4];
+    opts.rule_id = argv[5];
 
-    for (int i = 5; i < argc; ++i) {
+    for (int i = 6; i < argc; ++i) {
         const std::string_view arg{argv[i]};
         if (arg == "--server" && i + 1 < argc) {
             opts.server = argv[++i];
@@ -351,16 +352,17 @@ int run_compliance_run_rule_main(int argc, char* argv[]) {
 }
 
 int run_compliance_run_suite_main(int argc, char* argv[]) {
-    if (argc < 5) {
-        std::cerr << "usage: auracle compliance run-suite <unit-id> <suite-id> [options]\n";
+    if (argc < 6) {
+        std::cerr << "usage: auracle compliance run-suite <scanner-unit-id> <observed-device-id> <suite-id> [options]\n";
         return 2;
     }
 
     auracle::cli::ComplianceOptions opts;
-    opts.unit_id = argv[3];
-    opts.suite_id = argv[4];
+    opts.scanner_unit_id = argv[3];
+    opts.observed_device_id = argv[4];
+    opts.suite_id = argv[5];
 
-    for (int i = 5; i < argc; ++i) {
+    for (int i = 6; i < argc; ++i) {
         const std::string_view arg{argv[i]};
         if (arg == "--server" && i + 1 < argc) {
             opts.server = argv[++i];

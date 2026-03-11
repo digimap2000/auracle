@@ -3,15 +3,50 @@
 #include <type_traits>
 
 namespace auracle::compliance {
+namespace {
+
+bool evaluate_service_data_predicate(const Predicate& predicate, const ComplianceFacts& facts) {
+    const auto& service_data_uuids = facts.ea.service_data_uuids;
+    const std::uint16_t uuid = *predicate.path.key;
+
+    switch (predicate.op) {
+        case PredicateOp::has:
+            return service_data_uuids.contains(uuid);
+        case PredicateOp::lacks:
+            return !service_data_uuids.contains(uuid);
+        case PredicateOp::equals:
+        case PredicateOp::not_equals:
+            return false;
+    }
+
+    return false;
+}
+
+bool evaluate_appearance_predicate(const Predicate& predicate, const ComplianceFacts& facts) {
+    const auto appearance = facts.ea.appearance;
+
+    switch (predicate.op) {
+        case PredicateOp::has:
+            return appearance.has_value();
+        case PredicateOp::lacks:
+            return !appearance.has_value();
+        case PredicateOp::equals:
+            return appearance.has_value() && *appearance == *predicate.value;
+        case PredicateOp::not_equals:
+            return !appearance.has_value() || *appearance != *predicate.value;
+    }
+
+    return false;
+}
+
+} // namespace
 
 bool evaluate_predicate(const Predicate& predicate, const ComplianceFacts& facts) {
-    const auto& service_data_uuids = facts.ea.service_data_uuids;
-
-    switch (predicate.kind) {
-        case PredicateKind::has_service_data:
-            return service_data_uuids.contains(predicate.uuid);
-        case PredicateKind::lacks_service_data:
-            return !service_data_uuids.contains(predicate.uuid);
+    switch (predicate.path.kind) {
+        case FactPathKind::service_data:
+            return evaluate_service_data_predicate(predicate, facts);
+        case FactPathKind::ad_appearance:
+            return evaluate_appearance_predicate(predicate, facts);
     }
 
     return false;

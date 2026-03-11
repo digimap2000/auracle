@@ -240,10 +240,12 @@ void print_remote_result_pretty(const compliance_proto::ComplianceRunResult& res
     const FindingCounts counts = count_remote_findings(result.findings());
 
     std::cout << std::format(
-        "Target {} on unit {}: evaluated {} retained devices across {} rules\n",
+        "Target {} for DUT {} via scanner {} across {} rules\n",
         result.target_id(),
-        result.unit_id(),
-        result.evaluated_device_count(),
+        result.observed_device_name().empty()
+            ? result.observed_device_id()
+            : result.observed_device_name(),
+        result.scanner_unit_id(),
         result.rule_count());
 
     if (result.findings().empty()) {
@@ -277,10 +279,11 @@ void print_remote_result_json(const compliance_proto::ComplianceRunResult& resul
     const FindingCounts counts = count_remote_findings(result.findings());
 
     std::cout << "{"
-              << "\"unitId\":\"" << json_escape(result.unit_id()) << "\","
+              << "\"scannerUnitId\":\"" << json_escape(result.scanner_unit_id()) << "\","
               << "\"targetId\":\"" << json_escape(result.target_id()) << "\","
+              << "\"observedDeviceId\":\"" << json_escape(result.observed_device_id()) << "\","
+              << "\"observedDeviceName\":\"" << json_escape(result.observed_device_name()) << "\","
               << "\"ruleCount\":" << result.rule_count() << ','
-              << "\"evaluatedDeviceCount\":" << result.evaluated_device_count() << ','
               << "\"failCount\":" << counts.fail << ','
               << "\"warnCount\":" << counts.warn << ','
               << "\"infoCount\":" << counts.info << ','
@@ -463,7 +466,8 @@ int run_compliance_run_rule(const ComplianceOptions& opts) {
     grpc::ClientContext context;
     compliance_proto::RunComplianceRuleResponse response;
     compliance_proto::RunComplianceRuleRequest request;
-    request.set_unit_id(opts.unit_id);
+    request.set_scanner_unit_id(opts.scanner_unit_id);
+    request.set_observed_device_id(opts.observed_device_id);
     request.set_rule_id(opts.rule_id);
     const auto status = stub->RunComplianceRule(
         &context,
@@ -496,7 +500,8 @@ int run_compliance_run_suite(const ComplianceOptions& opts) {
     grpc::ClientContext context;
     compliance_proto::RunComplianceSuiteResponse response;
     compliance_proto::RunComplianceSuiteRequest request;
-    request.set_unit_id(opts.unit_id);
+    request.set_scanner_unit_id(opts.scanner_unit_id);
+    request.set_observed_device_id(opts.observed_device_id);
     request.set_suite_id(opts.suite_id);
     const auto status = stub->RunComplianceSuite(
         &context,

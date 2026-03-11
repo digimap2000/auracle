@@ -18,7 +18,7 @@ TEST(RepositoryTest, ResolvesRulesForSuite) {
     {
         std::ofstream output(rules_dir / "rule.rule");
         output << "TEST AURACAST_SRC_001\n"
-               << "WHEN EA HAS_SERVICE_DATA 0x1852\n"
+               << "WHEN EA HAS service_data.0x1852\n"
                << "THEN INFO\n"
                << "MESSAGE \"Example rule\"\n";
     }

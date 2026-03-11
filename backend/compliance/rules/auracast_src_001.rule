@@ -1,7 +1,7 @@
 TEST AURACAST_SRC_001
 TITLE "Public Broadcast Announcement required for Auracast Source"
-WHEN EA HAS_SERVICE_DATA 0x1852
- AND EA LACKS_SERVICE_DATA 0x1856
+WHEN EA HAS service_data.broadcast_audio_announcement
+ AND EA LACKS service_data.public_broadcast_announcement
 THEN FAIL
 MESSAGE "Source advertises as a Broadcast Source but is missing the Public Broadcast Announcement - not Auracast compliant"
 REFERENCE "PBP Section 4.1"

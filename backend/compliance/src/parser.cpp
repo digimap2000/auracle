@@ -2,7 +2,10 @@
 
 #include <compliance/tokenizer.hpp>
 
+#include <array>
+#include <cctype>
 #include <memory>
+#include <optional>
 #include <utility>
 
 namespace auracle::compliance {
@@ -34,6 +37,8 @@ namespace {
             return "string literal";
         case TokenKind::uuid_literal:
             return "UUID literal";
+        case TokenKind::dot:
+            return ".";
         case TokenKind::left_paren:
             return "(";
         case TokenKind::right_paren:
@@ -64,13 +69,52 @@ namespace {
             return "NOT";
         case TokenKind::kw_ea:
             return "EA";
-        case TokenKind::kw_has_service_data:
-            return "HAS_SERVICE_DATA";
-        case TokenKind::kw_lacks_service_data:
-            return "LACKS_SERVICE_DATA";
+        case TokenKind::kw_has:
+            return "HAS";
+        case TokenKind::kw_lacks:
+            return "LACKS";
+        case TokenKind::kw_equals:
+            return "EQUALS";
+        case TokenKind::kw_not_equals:
+            return "NOT_EQUALS";
     }
 
     return "token";
+}
+
+[[nodiscard]] bool is_rule_identifier(std::string_view text) noexcept {
+    if (text.empty()) {
+        return false;
+    }
+
+    const char first = text.front();
+    if (!((first >= 'A' && first <= 'Z') || first == '_')) {
+        return false;
+    }
+
+    for (const char ch : text) {
+        if ((ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_') {
+            continue;
+        }
+        return false;
+    }
+
+    return true;
+}
+
+[[nodiscard]] std::optional<std::uint16_t> service_data_alias(std::string_view name) {
+    static constexpr std::array aliases{
+        std::pair{"broadcast_audio_announcement", static_cast<std::uint16_t>(0x1852)},
+        std::pair{"public_broadcast_announcement", static_cast<std::uint16_t>(0x1856)},
+    };
+
+    for (const auto& [alias, uuid] : aliases) {
+        if (name == alias) {
+            return uuid;
+        }
+    }
+
+    return std::nullopt;
 }
 
 class Parser {
@@ -80,7 +124,13 @@ public:
 
     [[nodiscard]] Rule parse_rule() {
         (void)consume(TokenKind::kw_test, "Expected TEST clause");
-        const std::string id = consume_identifier("Expected test identifier").text;
+        Token id = consume_identifier("Expected test identifier");
+        if (!is_rule_identifier(id.text)) {
+            throw ParseError(
+                "Test identifiers must use uppercase letters, digits, and underscores",
+                id.location.line,
+                id.location.column);
+        }
 
         std::optional<std::string> title;
         if (match(TokenKind::kw_title)) {
@@ -104,7 +154,7 @@ public:
         (void)consume(TokenKind::end_of_file, "Unexpected trailing input");
 
         return Rule{
-            .id = id,
+            .id = std::move(id.text),
             .title = std::move(title),
             .when = std::move(when),
             .verdict = verdict,
@@ -169,25 +219,119 @@ private:
     }
 
     [[nodiscard]] Predicate parse_predicate() {
-        const Token scope_token = consume(TokenKind::kw_ea, "Expected scope");
-        (void)scope_token;
+        (void)consume(TokenKind::kw_ea, "Expected scope");
 
-        PredicateKind kind{};
-        if (match(TokenKind::kw_has_service_data)) {
-            kind = PredicateKind::has_service_data;
-        } else if (match(TokenKind::kw_lacks_service_data)) {
-            kind = PredicateKind::lacks_service_data;
-        } else {
-            throw error_here("Expected predicate operator");
+        if (match(TokenKind::kw_has)) {
+            return parse_membership_predicate(PredicateOp::has);
+        }
+        if (match(TokenKind::kw_lacks)) {
+            return parse_membership_predicate(PredicateOp::lacks);
+        }
+        if (match(TokenKind::dot)) {
+            FactPath path = parse_scoped_fact_path();
+            PredicateOp op = parse_comparison_op();
+            const Token value = consume(TokenKind::uuid_literal, "Expected 16-bit UUID literal");
+            validate_predicate(path, op, value.location);
+            return Predicate{
+                .scope = Scope::ea,
+                .path = std::move(path),
+                .op = op,
+                .value = value.uuid,
+            };
         }
 
-        const Token uuid = consume(TokenKind::uuid_literal, "Expected 16-bit UUID literal");
+        throw error_here("Expected predicate operator");
+    }
 
+    [[nodiscard]] Predicate parse_membership_predicate(PredicateOp op) {
+        FactPath path = parse_fact_path();
+        validate_predicate(path, op, current_.location);
         return Predicate{
             .scope = Scope::ea,
-            .kind = kind,
-            .uuid = uuid.uuid,
+            .path = std::move(path),
+            .op = op,
+            .value = std::nullopt,
         };
+    }
+
+    [[nodiscard]] FactPath parse_fact_path() {
+        const Token root = consume(TokenKind::identifier, "Expected fact path");
+        if (root.text == "service_data") {
+            (void)consume(TokenKind::dot, "Expected '.' after service_data");
+            return FactPath{
+                .kind = FactPathKind::service_data,
+                .key = parse_service_data_key(),
+            };
+        }
+        if (root.text == "ad") {
+            (void)consume(TokenKind::dot, "Expected '.' after ad");
+            const Token leaf = consume(TokenKind::identifier, "Expected advertising property");
+            if (leaf.text != "appearance") {
+                throw ParseError(
+                    "Unsupported advertising property '" + leaf.text + "'",
+                    leaf.location.line,
+                    leaf.location.column);
+            }
+            return FactPath{
+                .kind = FactPathKind::ad_appearance,
+                .key = std::nullopt,
+            };
+        }
+
+        throw ParseError(
+            "Unsupported fact path root '" + root.text + "'",
+            root.location.line,
+            root.location.column);
+    }
+
+    [[nodiscard]] FactPath parse_scoped_fact_path() {
+        return parse_fact_path();
+    }
+
+    [[nodiscard]] std::uint16_t parse_service_data_key() {
+        if (current_.kind == TokenKind::uuid_literal) {
+            const Token token = current_;
+            advance();
+            return token.uuid;
+        }
+
+        const Token alias = consume(TokenKind::identifier, "Expected service_data key");
+        if (const auto resolved = service_data_alias(alias.text)) {
+            return *resolved;
+        }
+
+        throw ParseError(
+            "Unknown service_data alias '" + alias.text + "'",
+            alias.location.line,
+            alias.location.column);
+    }
+
+    [[nodiscard]] PredicateOp parse_comparison_op() {
+        if (match(TokenKind::kw_equals)) {
+            return PredicateOp::equals;
+        }
+        if (match(TokenKind::kw_not_equals)) {
+            return PredicateOp::not_equals;
+        }
+        throw error_here("Expected comparison operator");
+    }
+
+    void validate_predicate(
+        const FactPath& path,
+        PredicateOp op,
+        const SourceLocation& location) const {
+        switch (path.kind) {
+            case FactPathKind::service_data:
+                if (op == PredicateOp::has || op == PredicateOp::lacks) {
+                    return;
+                }
+                throw ParseError(
+                    "service_data paths only support HAS or LACKS",
+                    location.line,
+                    location.column);
+            case FactPathKind::ad_appearance:
+                return;
+        }
     }
 
     [[nodiscard]] Verdict parse_verdict() {

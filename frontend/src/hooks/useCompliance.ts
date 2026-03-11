@@ -55,10 +55,14 @@ export function useCompliance() {
     refresh();
   }, [refresh]);
 
-  const runRule = useCallback(async (unitId: string, ruleId: string) => {
+  const runRule = useCallback(async (
+    scannerUnitId: string,
+    observedDeviceId: string,
+    ruleId: string
+  ) => {
     setState((prev) => ({ ...prev, running: true, error: null }));
     try {
-      const result = await runComplianceRule(unitId, ruleId);
+      const result = await runComplianceRule(scannerUnitId, observedDeviceId, ruleId);
       setState((prev) => ({ ...prev, result, running: false, error: null }));
       return result;
     } catch (err) {
@@ -68,10 +72,14 @@ export function useCompliance() {
     }
   }, []);
 
-  const runSuite = useCallback(async (unitId: string, suiteId: string) => {
+  const runSuite = useCallback(async (
+    scannerUnitId: string,
+    observedDeviceId: string,
+    suiteId: string
+  ) => {
     setState((prev) => ({ ...prev, running: true, error: null }));
     try {
-      const result = await runComplianceSuite(unitId, suiteId);
+      const result = await runComplianceSuite(scannerUnitId, observedDeviceId, suiteId);
       setState((prev) => ({ ...prev, result, running: false, error: null }));
       return result;
     } catch (err) {

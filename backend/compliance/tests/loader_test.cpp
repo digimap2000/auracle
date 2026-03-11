@@ -10,7 +10,7 @@ namespace auracle::compliance {
 namespace {
 
 constexpr std::string_view kRuleText = R"(TEST AURACAST_SRC_001
-WHEN EA HAS_SERVICE_DATA 0x1852
+WHEN EA HAS service_data.0x1852
 THEN INFO
 MESSAGE "Example rule")";
 

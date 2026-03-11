@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ClipboardCheck, Loader2, RefreshCw, TriangleAlert } from "lucide-react";
+import { ClipboardCheck, Loader2, RefreshCw, RadioTower, TriangleAlert } from "lucide-react";
 import { Header } from "@/components/layout/Header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,10 +13,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useCompliance } from "@/hooks/useCompliance";
-import type { ComplianceFinding, DaemonUnit } from "@/lib/tauri";
+import type { BleDevice, ComplianceFinding, DaemonUnit } from "@/lib/tauri";
 
 interface ComplianceProps {
   units: DaemonUnit[];
+  bleDevices: BleDevice[];
+}
+
+interface ObservedDeviceOption {
+  id: string;
+  name: string;
+  stableId: string;
+  services: string[];
+  lastSeen: string;
 }
 
 function canRunCompliance(unit: DaemonUnit) {
@@ -48,27 +57,65 @@ function countVerdicts(findings: ComplianceFinding[]) {
   );
 }
 
-export function Compliance({ units }: ComplianceProps) {
+export function Compliance({ units, bleDevices }: ComplianceProps) {
   const { rules, suites, result, loading, running, error, refresh, runRule, runSuite } = useCompliance();
 
-  const scannableUnits = useMemo(
+  const scannerUnits = useMemo(
     () => units.filter(canRunCompliance),
     [units]
   );
 
-  const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
+  const [selectedScannerUnitId, setSelectedScannerUnitId] = useState<string | null>(null);
+  const [selectedObservedDeviceId, setSelectedObservedDeviceId] = useState<string | null>(null);
   const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null);
   const [selectedSuiteId, setSelectedSuiteId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (scannableUnits.length === 0) {
-      setSelectedUnitId(null);
+    if (scannerUnits.length === 0) {
+      setSelectedScannerUnitId(null);
       return;
     }
-    if (!selectedUnitId || !scannableUnits.some((unit) => unit.id === selectedUnitId)) {
-      setSelectedUnitId(scannableUnits[0]?.id ?? null);
+    if (!selectedScannerUnitId || !scannerUnits.some((unit) => unit.id === selectedScannerUnitId)) {
+      setSelectedScannerUnitId(scannerUnits[0]?.id ?? null);
     }
-  }, [scannableUnits, selectedUnitId]);
+  }, [scannerUnits, selectedScannerUnitId]);
+
+  const observedDevices = useMemo<ObservedDeviceOption[]>(() => {
+    if (!selectedScannerUnitId) {
+      return [];
+    }
+
+    return bleDevices
+      .filter((device) => device.unit_id === selectedScannerUnitId)
+      .map((device) => ({
+        id: device.id,
+        name: device.name,
+        stableId: device.stable_id,
+        services: device.services,
+        lastSeen: device.last_seen,
+      }))
+      .sort((a, b) => {
+        const aUnknown = a.name === "Unknown";
+        const bUnknown = b.name === "Unknown";
+        if (aUnknown !== bUnknown) {
+          return aUnknown ? 1 : -1;
+        }
+        if (a.name !== b.name) {
+          return a.name.localeCompare(b.name);
+        }
+        return a.id.localeCompare(b.id);
+      });
+  }, [bleDevices, selectedScannerUnitId]);
+
+  useEffect(() => {
+    if (observedDevices.length === 0) {
+      setSelectedObservedDeviceId(null);
+      return;
+    }
+    if (!selectedObservedDeviceId || !observedDevices.some((device) => device.id === selectedObservedDeviceId)) {
+      setSelectedObservedDeviceId(observedDevices[0]?.id ?? null);
+    }
+  }, [observedDevices, selectedObservedDeviceId]);
 
   useEffect(() => {
     if (rules.length > 0 && (!selectedRuleId || !rules.some((rule) => rule.id === selectedRuleId))) {
@@ -90,9 +137,13 @@ export function Compliance({ units }: ComplianceProps) {
     () => suites.find((suite) => suite.id === selectedSuiteId) ?? null,
     [suites, selectedSuiteId]
   );
-  const selectedUnit = useMemo(
-    () => scannableUnits.find((unit) => unit.id === selectedUnitId) ?? null,
-    [scannableUnits, selectedUnitId]
+  const selectedScannerUnit = useMemo(
+    () => scannerUnits.find((unit) => unit.id === selectedScannerUnitId) ?? null,
+    [scannerUnits, selectedScannerUnitId]
+  );
+  const selectedObservedDevice = useMemo(
+    () => observedDevices.find((device) => device.id === selectedObservedDeviceId) ?? null,
+    [observedDevices, selectedObservedDeviceId]
   );
 
   const counts = useMemo(
@@ -102,37 +153,88 @@ export function Compliance({ units }: ComplianceProps) {
 
   return (
     <>
-      <Header title="Compliance" description="Run daemon-backed Auracast compliance rules against retained observations." />
+      <Header title="Compliance" description="Run daemon-backed Auracast compliance rules against one detected DUT using a selected scanner unit." />
       <div className="flex min-h-0 flex-1 flex-col">
         <ScrollArea className="h-full">
           <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-6 py-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Target Unit</CardTitle>
-                <CardDescription>
-                  Compliance runs evaluate the daemon&apos;s retained BLE observations for a scan-capable unit.
-                  Run a scan first on the Devices page to populate the retained set.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <Select value={selectedUnitId ?? undefined} onValueChange={setSelectedUnitId}>
-                  <SelectTrigger className="w-full bg-background sm:min-w-80">
-                    <SelectValue placeholder="Select scan unit" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {scannableUnits.map((unit) => (
-                      <SelectItem key={unit.id} value={unit.id}>
-                        {(unit.product || unit.kind) + " · " + unit.id}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button variant="outline" onClick={refresh} disabled={loading || running}>
-                  <RefreshCw className={loading ? "animate-spin" : ""} />
-                  Refresh Catalog
-                </Button>
-              </CardContent>
-            </Card>
+            <div className="grid gap-4 lg:grid-cols-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Scanner Unit</CardTitle>
+                  <CardDescription>
+                    Choose the hardware unit that is sniffing the radio environment and retaining BLE observations.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <Select value={selectedScannerUnitId ?? undefined} onValueChange={setSelectedScannerUnitId}>
+                    <SelectTrigger className="w-full bg-background sm:min-w-80">
+                      <SelectValue placeholder="Select scanner unit" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {scannerUnits.map((unit) => (
+                        <SelectItem key={unit.id} value={unit.id}>
+                          {(unit.product || unit.kind) + " · " + unit.id}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button variant="outline" onClick={refresh} disabled={loading || running}>
+                    <RefreshCw className={loading ? "animate-spin" : ""} />
+                    Refresh Catalog
+                  </Button>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Detected Device</CardTitle>
+                  <CardDescription>
+                    Select the DUT found by the chosen scanner unit. Compliance runs target exactly one observed device.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <Select
+                    value={selectedObservedDeviceId ?? undefined}
+                    onValueChange={setSelectedObservedDeviceId}
+                    disabled={observedDevices.length === 0}
+                  >
+                    <SelectTrigger className="w-full bg-background">
+                      <SelectValue placeholder="Select observed DUT" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {observedDevices.map((device) => (
+                        <SelectItem key={device.id} value={device.id}>
+                          {(device.name !== "Unknown" ? device.name : device.id) + " · " + device.id}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {selectedObservedDevice ? (
+                    <div className="rounded-md border bg-background p-3 text-xs text-muted-foreground">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-medium text-foreground">
+                          {selectedObservedDevice.name !== "Unknown"
+                            ? selectedObservedDevice.name
+                            : selectedObservedDevice.id}
+                        </p>
+                        <Badge variant="outline" className="font-mono">{selectedObservedDevice.id}</Badge>
+                      </div>
+                      <p className="mt-1 font-mono">{selectedObservedDevice.stableId}</p>
+                      <p className="mt-2">Last seen: {selectedObservedDevice.lastSeen}</p>
+                      <p className="mt-1">
+                        {selectedObservedDevice.services.length > 0
+                          ? `${selectedObservedDevice.services.length} advertised services`
+                          : "No decoded service UUIDs on the retained snapshot"}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="rounded-md border border-dashed bg-background p-3 text-xs text-muted-foreground">
+                      Run a scan on the Devices page and wait for the selected scanner to discover the DUT.
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
 
             {error && (
               <Card>
@@ -150,11 +252,18 @@ export function Compliance({ units }: ComplianceProps) {
                   <p className="text-sm">Loading compliance catalog from the daemon...</p>
                 </CardContent>
               </Card>
-            ) : scannableUnits.length === 0 ? (
+            ) : scannerUnits.length === 0 ? (
               <Card>
                 <CardContent className="flex items-center gap-3 pt-4 text-muted-foreground">
                   <ClipboardCheck className="size-4 shrink-0 opacity-50" />
                   <p className="text-sm">No present units advertise BLE scan capability yet.</p>
+                </CardContent>
+              </Card>
+            ) : observedDevices.length === 0 ? (
+              <Card>
+                <CardContent className="flex items-center gap-3 pt-4 text-muted-foreground">
+                  <RadioTower className="size-4 shrink-0 opacity-50" />
+                  <p className="text-sm">The selected scanner unit has not retained any detected DUTs yet.</p>
                 </CardContent>
               </Card>
             ) : (
@@ -164,7 +273,7 @@ export function Compliance({ units }: ComplianceProps) {
                     <CardHeader>
                       <CardTitle>Run Suite</CardTitle>
                       <CardDescription>
-                        Execute a curated compliance suite against the selected unit&apos;s retained advertisements.
+                        Execute a curated compliance suite against the selected DUT only.
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-3">
@@ -188,10 +297,10 @@ export function Compliance({ units }: ComplianceProps) {
                       )}
                       <Button
                         className="w-full"
-                        disabled={!selectedUnitId || !selectedSuiteId || running}
+                        disabled={!selectedScannerUnitId || !selectedObservedDeviceId || !selectedSuiteId || running}
                         onClick={() => {
-                          if (selectedUnitId && selectedSuiteId) {
-                            void runSuite(selectedUnitId, selectedSuiteId);
+                          if (selectedScannerUnitId && selectedObservedDeviceId && selectedSuiteId) {
+                            void runSuite(selectedScannerUnitId, selectedObservedDeviceId, selectedSuiteId);
                           }
                         }}
                       >
@@ -205,7 +314,7 @@ export function Compliance({ units }: ComplianceProps) {
                     <CardHeader>
                       <CardTitle>Run Individual Test</CardTitle>
                       <CardDescription>
-                        Execute one authored compliance rule directly against the selected unit.
+                        Execute one authored compliance rule directly against the selected DUT.
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-3">
@@ -234,10 +343,10 @@ export function Compliance({ units }: ComplianceProps) {
                       <Button
                         className="w-full"
                         variant="outline"
-                        disabled={!selectedUnitId || !selectedRuleId || running}
+                        disabled={!selectedScannerUnitId || !selectedObservedDeviceId || !selectedRuleId || running}
                         onClick={() => {
-                          if (selectedUnitId && selectedRuleId) {
-                            void runRule(selectedUnitId, selectedRuleId);
+                          if (selectedScannerUnitId && selectedObservedDeviceId && selectedRuleId) {
+                            void runRule(selectedScannerUnitId, selectedObservedDeviceId, selectedRuleId);
                           }
                         }}
                       >
@@ -253,7 +362,7 @@ export function Compliance({ units }: ComplianceProps) {
                     <CardTitle>Last Result</CardTitle>
                     <CardDescription>
                       {result
-                        ? `Target ${result.target_id} on ${result.unit_id}`
+                        ? `Target ${result.target_id} for ${result.observed_device_name || result.observed_device_id} via ${result.scanner_unit_id}`
                         : "No compliance run has been executed in this session yet."}
                     </CardDescription>
                   </CardHeader>
@@ -261,15 +370,15 @@ export function Compliance({ units }: ComplianceProps) {
                     {result ? (
                       <>
                         <div className="flex flex-wrap gap-2">
-                          <Badge variant="outline">{result.evaluated_device_count} retained devices</Badge>
                           <Badge variant="outline">{result.rule_count} rules</Badge>
+                          <Badge variant="outline" className="font-mono">{result.observed_device_id}</Badge>
                           <Badge variant="error">{counts.fail} fail</Badge>
                           <Badge variant="warn">{counts.warn} warn</Badge>
                           <Badge variant="info">{counts.info} info</Badge>
                         </div>
                         {result.findings.length === 0 ? (
                           <div className="rounded-md border bg-background p-4 text-sm text-muted-foreground">
-                            PASS. No findings were raised for the retained observations on this unit.
+                            PASS. No findings were raised for the selected DUT.
                           </div>
                         ) : (
                           <div className="space-y-3">
@@ -293,12 +402,12 @@ export function Compliance({ units }: ComplianceProps) {
                       </>
                     ) : (
                       <div className="rounded-md border border-dashed bg-background p-4 text-sm text-muted-foreground">
-                        Select a unit and run either a suite or an individual test to populate results here.
+                        Select a scanner unit, pick one detected DUT, and run either a suite or an individual test.
                       </div>
                     )}
-                    {selectedUnit && (
+                    {selectedScannerUnit && (
                       <p className="text-xs text-muted-foreground">
-                        Selected unit: <span className="font-mono">{selectedUnit.id}</span>
+                        Scanner unit: <span className="font-mono">{selectedScannerUnit.id}</span>
                       </p>
                     )}
                   </CardContent>
