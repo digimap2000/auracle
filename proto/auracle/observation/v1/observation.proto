@@ -23,6 +23,7 @@ message ServiceDataEnumEntryMetadata {
     uint32 value = 1;
     string short_name = 2;
     string description = 3;
+    repeated string implications = 4;
 }
 
 message ServiceDataFieldMetadata {

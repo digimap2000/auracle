@@ -78,6 +78,7 @@ export interface ServiceDataEnumEntryMetadata {
   value: number;
   short_name: string;
   description: string;
+  implications: string[];
 }
 
 export async function startBleScan(): Promise<void> {

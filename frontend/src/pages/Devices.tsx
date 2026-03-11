@@ -235,6 +235,18 @@ function EnumEntryList({
             </span>
           </div>
           <p className="mt-1 text-xs text-muted-foreground">{entry.description}</p>
+          {entry.implications.length > 0 && (
+            <div className="mt-2 space-y-1 border-t border-border/50 pt-2">
+              {entry.implications.map((implication, index) => (
+                <p
+                  key={`${entry.short_name}:${index}`}
+                  className="text-xs text-amber-700 dark:text-amber-400"
+                >
+                  {implication}
+                </p>
+              ))}
+            </div>
+          )}
         </div>
       ))}
     </div>

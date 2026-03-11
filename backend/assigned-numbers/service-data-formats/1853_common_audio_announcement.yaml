@@ -1,0 +1,27 @@
+uuid: 0x1853
+name: Common Audio Announcement
+description: Carries the announcement type and optional profile-specific data for the Common Audio Profile.
+fields:
+  - field: Announcement Type
+    type: uint8
+    kind: uint8
+    format: hex
+    enum_match: exact
+    enumerations:
+      - value: 0x00
+        short_name: general
+        description: General announcement not targeted at a specific device.
+        implications:
+          - Any nearby Unicast Client or Broadcast Assistant may initiate a connection
+      - value: 0x01
+        short_name: targeted
+        description: Targeted announcement intended for a specific device.
+        implications:
+          - Source is directing at a specific device using CSIP coordinated set identity
+          - Sinks not in the target set should expect connection attempts to be rejected
+          - Requires CSIP Set Member discovery to identify the intended recipient (CAP Section 4.2)
+  - field: Trailing Data
+    type: bytes
+    kind: bytes_remainder
+    omit_if_empty: true
+validations: []

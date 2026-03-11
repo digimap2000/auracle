@@ -27,6 +27,7 @@ struct service_data_enum_entry_definition {
     std::uint32_t value;
     std::string_view short_name;
     std::string_view description;
+    std::span<const std::string_view> implications;
 };
 
 struct service_data_field_definition {

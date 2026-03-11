@@ -175,10 +175,24 @@ def _parse_service_data_formats(directory: Path) -> list[dict]:
                     raise ValueError(f"{filepath}: enumeration on {field_name!r} is missing short_name")
                 if not enum_description:
                     raise ValueError(f"{filepath}: enumeration on {field_name!r} is missing description")
+                implications_raw = enum_entry.get("implications", [])
+                if implications_raw is None:
+                    implications_raw = []
+                if not isinstance(implications_raw, list):
+                    raise ValueError(
+                        f"{filepath}: implications on {field_name!r} must be a list of strings")
+                implications = []
+                for implication in implications_raw:
+                    implication_text = str(implication).strip()
+                    if not implication_text:
+                        raise ValueError(
+                            f"{filepath}: empty implication on {field_name!r} is not allowed")
+                    implications.append(implication_text)
                 enumerations.append({
                     "value": _parse_int(enum_entry.get("value"), filepath, f"enumeration value for {field_name}"),
                     "short_name": short_name,
                     "description": enum_description,
+                    "implications": implications,
                 })
 
             field_indices[field_name] = index
@@ -340,16 +354,37 @@ def _emit_service_data_formats(formats: list[dict]) -> str:
             if not enum_entries:
                 continue
 
+            for entry_index, entry in enumerate(enum_entries):
+                implications = entry["implications"]
+                if not implications:
+                    continue
+
+                implications_name = (
+                    f'k{fmt["symbol"]}Field{index}EnumEntry{entry_index}Implications'
+                )
+                parts.append(
+                    f"constexpr std::array<std::string_view, {len(implications)}> "
+                    f"{implications_name}{{{{"
+                )
+                for implication in implications:
+                    parts.append(f'    "{_c_escape(implication)}",')
+                parts.append("}};\n")
+
             enum_entries_name = f'k{fmt["symbol"]}Field{index}EnumEntries'
             parts.append(
                 f"constexpr std::array<service_data_enum_entry_definition, {len(enum_entries)}> "
                 f"{enum_entries_name}{{{{"
             )
-            for entry in enum_entries:
+            for entry_index, entry in enumerate(enum_entries):
                 parts.append("    service_data_enum_entry_definition{")
                 parts.append(f'        .value = 0x{entry["value"]:X},')
                 parts.append(f'        .short_name = "{_c_escape(entry["short_name"])}",')
                 parts.append(f'        .description = "{_c_escape(entry["description"])}",')
+                if entry["implications"]:
+                    parts.append(
+                        f'        .implications = '
+                        f'k{fmt["symbol"]}Field{index}EnumEntry{entry_index}Implications,'
+                    )
                 parts.append("    },")
             parts.append("}};\n")
 

@@ -80,6 +80,7 @@ validations:
 - `omit_if_empty`: Optional. Only meaningful for `bytes_remainder`. If `true`, an empty field is omitted from the decoded output.
 - `enum_match`: Optional. How `enumerations` are matched. Defaults to `exact`.
 - `enumerations`: Optional. Named values or bit masks attached to a numeric field.
+- `implications`: Optional on enumeration entries only. Developer-facing consequences, follow-ups, or cross-spec pointers.
 
 ## Supported Field Kinds
 
@@ -112,11 +113,33 @@ enumerations:
   - value: 0x04
     short_name: high_quality
     description: The public broadcast offers a high quality audio presentation.
+    implications:
+      - Codec configuration uses higher sample rates and bitrates (typically 48 kHz)
 ```
 
 - `value`: Required numeric value or bit mask.
 - `short_name`: Required compact identifier.
 - `description`: Required human-readable meaning.
+- `implications`: Optional list of terse actionable consequences for the developer.
+
+Implication rules:
+
+- Use zero or more strings.
+- Omit the key entirely if there is nothing useful to say.
+- Do not repeat the description.
+- Describe what happens for the integrator, not where the spec text lives.
+- If a cross-spec pointer matters, append it to the implication rather than adding it as a separate note.
+
+Example:
+
+```yaml
+  - value: 0x01
+    short_name: encrypted
+    description: The public broadcast requires the broadcast code.
+    implications:
+      - BIS payload decryption will fail without the Broadcast_Code
+      - Use BASS Add Source to supply the code via a Broadcast Assistant (BAP Section 6.5.7)
+```
 
 ## Supported Validations
 

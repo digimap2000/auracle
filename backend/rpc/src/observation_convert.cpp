@@ -150,6 +150,9 @@ void to_proto(
             out_entry->set_value(entry.value);
             out_entry->set_short_name(entry.short_name);
             out_entry->set_description(entry.description);
+            for (const auto& implication : entry.implications) {
+                out_entry->add_implications(implication);
+            }
         }
     }
 }

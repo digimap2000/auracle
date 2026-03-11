@@ -85,6 +85,7 @@ pub struct ServiceDataEnumEntryMetadata {
     pub value: u32,
     pub short_name: String,
     pub description: String,
+    pub implications: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

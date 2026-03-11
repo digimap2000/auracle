@@ -20,6 +20,7 @@ struct service_data_enum_entry_metadata {
     std::uint32_t value;
     std::string short_name;
     std::string description;
+    std::vector<std::string> implications;
 };
 
 struct service_data_field_metadata {

@@ -366,6 +366,14 @@ service_data_format_metadata describe_service_data_format(std::string_view servi
                 .value = entry.value,
                 .short_name = std::string(entry.short_name),
                 .description = std::string(entry.description),
+                .implications = [&entry] {
+                    std::vector<std::string> implications;
+                    implications.reserve(entry.implications.size());
+                    for (const auto implication : entry.implications) {
+                        implications.push_back(std::string(implication));
+                    }
+                    return implications;
+                }(),
             });
         }
         metadata.fields.push_back(std::move(field_metadata));

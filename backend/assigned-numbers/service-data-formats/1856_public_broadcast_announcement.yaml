@@ -11,12 +11,22 @@ fields:
       - value: 0x01
         short_name: encrypted
         description: The public broadcast requires the broadcast code and is not open for unencrypted reception.
+        implications:
+          - BIS payload decryption will fail without the Broadcast_Code
+          - Use BASS Add Source to supply the code via a Broadcast Assistant (BAP Section 6.5.7)
+          - Sink will sync to PA and parse BASE normally but produce no audio without the code
       - value: 0x02
         short_name: standard_quality
         description: The public broadcast offers a standard quality audio presentation.
+        implications:
+          - Codec configuration uses lower sample rates and bitrates (typically 16-24 kHz)
+          - Sinks that only support high quality configurations will not match
       - value: 0x04
         short_name: high_quality
         description: The public broadcast offers a high quality audio presentation.
+        implications:
+          - Codec configuration uses higher sample rates and bitrates (typically 48 kHz)
+          - Sinks that only support standard quality configurations will not match
   - field: Metadata Length
     type: uint8
     kind: uint8

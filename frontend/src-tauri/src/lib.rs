@@ -227,6 +227,7 @@ async fn describe_daemon_service_data_formats(
                             value: entry.value,
                             short_name: entry.short_name,
                             description: entry.description,
+                            implications: entry.implications,
                         })
                         .collect(),
                 })
