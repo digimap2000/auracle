@@ -9,13 +9,17 @@ graph TB
 
     subgraph DaemonLayer["Backend Daemon Layer"]
         direction LR
-        gRPCServer["gRPC Server<br/><i>Inventory + Observation</i>"]
+        gRPCServer["gRPC Server<br/><i>Inventory + Observation + Compliance</i>"]
         Registry["Inventory Registry<br/><i>Capability Model</i>"]
         Providers["Providers<br/><i>Serial · BT · mDNS</i>"]
         Probers["Probers<br/><i>BT · mDNS Agent</i>"]
         ScanMgr["Scanner Manager<br/><i>CoreBluetooth</i>"]
+        Decoder["Payload Decoder<br/><i>YAML Formats</i>"]
+        Compliance["Compliance Engine<br/><i>DSL Rules + Suites</i>"]
         gRPCServer --- Registry
         gRPCServer --- ScanMgr
+        gRPCServer --- Decoder
+        gRPCServer --- Compliance
         Registry --- Providers
         Registry --- Probers
     end

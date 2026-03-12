@@ -15,32 +15,50 @@ flowchart LR
         WireParser["Wire Protocol<br/><i>NDJSON Parser</i>"]
     end
 
+    subgraph Path3["Path 3 — Advertisement Decode"]
+        DecodeRPC["DecodeAdvertisement<br/><i>gRPC unary</i>"]
+        YAMLFormats["YAML Format Schemas<br/><i>Service Data Definitions</i>"]
+    end
+
+    subgraph Path4["Path 4 — Compliance"]
+        CompRPC["ComplianceService<br/><i>RunRule / RunSuite</i>"]
+        DSLEngine["DSL Evaluator<br/><i>Rules + Suites</i>"]
+    end
+
     subgraph DaemonSvc["Backend Daemon"]
         Inventory["Inventory<br/>Registry"]
         InvSvc["InventoryService<br/><i>gRPC</i>"]
     end
 
     subgraph TauriApp["Tauri App"]
-        ScanBridge["DaemonScanBridge<br/><i>gRPC → BleDevice</i>"]
+        ScanBridge["DaemonScanBridge<br/><i>gRPC → BleDevice + BlePacket</i>"]
         RustBE["Rust Backend<br/><i>Commands + Events</i>"]
     end
 
     subgraph UI["React Frontend"]
-        Hooks["Hooks<br/><i>useDevices</i>"]
-        Pages["Pages<br/><i>Home</i>"]
+        Hooks["Hooks<br/><i>useDevices · useUnits · useCompliance</i>"]
+        Pages["Pages<br/><i>Home · Devices · Sink · Compliance</i>"]
     end
 
     BLE_ADV -->|"BLE"| CBScanner
     CBScanner --> ScanMgr
     ScanMgr --> ObsSvc
     ObsSvc -->|"gRPC stream<br/>WatchObservations"| ScanBridge
-    ScanBridge -->|"ble-devices-updated<br/><i>Tauri event</i>"| RustBE
+    ScanBridge -->|"ble-devices-updated<br/>ble-packet-received<br/><i>Tauri events</i>"| RustBE
 
     BLE_ADV -->|"BLE ISO"| nRF
     nRF -->|"NDJSON<br/>/dev/tty.*"| WireParser
     WireParser --> Inventory
     Inventory --> InvSvc
     InvSvc -->|"gRPC<br/>ListUnits / Watch"| RustBE
+
+    RustBE -->|"gRPC unary"| DecodeRPC
+    DecodeRPC --- YAMLFormats
+    DecodeRPC -->|"DecodedServiceData"| RustBE
+
+    RustBE -->|"gRPC unary"| CompRPC
+    CompRPC --- DSLEngine
+    CompRPC -->|"ComplianceRunResult"| RustBE
 
     RustBE -->|"Tauri IPC"| Hooks
     Hooks --> Pages

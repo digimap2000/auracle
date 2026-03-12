@@ -11,11 +11,20 @@ Thumbs.db
 # KiCad generated/cache files
 hardware/*/fp-info-cache
 hardware/*-backups/
+hardware/*/#auto_saved_files#
+hardware/*/_autosave-*
 
 # Bluetooth spec PDFs and digests (large binaries, not source)
 docs/specs/*.pdf
 docs/digest/
 
+
+# IDE / editor local config
+.vscode/
+.idea/
+
+# MCP local config
+frontend/.mcp.json
 
 # Claude Code worktrees
 .claude/worktrees/
